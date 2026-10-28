@@ -11,6 +11,12 @@ public interface UserMapper {
     // The service hashes the raw password and sets it, so it is never mapped as-is
     @Mapping(target = "password", ignore = true)
     @Mapping(target = "role", ignore = true)
+    @Mapping(target = "photo", defaultValue = User.DEFAULT_PHOTO)
+    // Account state is internal and never set from client input
+    @Mapping(target = "passwordChangedAt", ignore = true)
+    @Mapping(target = "passwordResetToken", ignore = true)
+    @Mapping(target = "passwordResetExpires", ignore = true)
+    @Mapping(target = "active", ignore = true)
     @Mapping(target = "version", ignore = true)
     User userDTOToUser(UserDTO userDTO);
 

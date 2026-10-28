@@ -109,6 +109,29 @@ class RepositoryTest {
     }
 
     @Test
+    void savesUserWithAccountDefaultsAndLowercaseEmail() {
+        User saved = userRepository.saveAndFlush(User.builder()
+                .name("Jane")
+                .email("  Jane.Doe@Example.COM ")
+                .password("{bcrypt}$2a$10$hashedvalue")
+                .build());
+
+        assertThat(saved.getEmail()).isEqualTo("jane.doe@example.com");
+        assertThat(saved.getPhoto()).isEqualTo(User.DEFAULT_PHOTO);
+        assertThat(saved.getActive()).isTrue();
+        assertThat(saved.getPasswordChangedAt()).isNull();
+        assertThat(saved.getPasswordResetToken()).isNull();
+    }
+
+    @Test
+    void rejectsDuplicateEmailRegardlessOfCase() {
+        userRepository.saveAndFlush(validUser("jane@example.com", Role.USER));
+
+        assertThatThrownBy(() -> userRepository.saveAndFlush(validUser("JANE@example.com", Role.USER)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void findsUsersByRole() {
         userRepository.saveAll(List.of(
                 validUser("lead@example.com", Role.LEAD_GUIDE),

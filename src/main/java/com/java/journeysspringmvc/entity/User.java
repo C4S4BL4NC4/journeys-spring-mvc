@@ -13,6 +13,7 @@ import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 @Getter
@@ -23,6 +24,8 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class User {
+    public static final String DEFAULT_PHOTO = "default.jpg";
+
     @Id
     @GeneratedValue(generator = "UUID")
     @UuidGenerator
@@ -42,7 +45,9 @@ public class User {
     private String email;
 
     @Size(max = 255)
-    private String photo;
+    @Builder.Default
+    @Column(nullable = false)
+    private String photo = DEFAULT_PHOTO;
 
     @NotNull
     @Builder.Default
@@ -56,6 +61,21 @@ public class User {
     @Column(length = 100, nullable = false)
     private String password;
 
+    private LocalDateTime passwordChangedAt;
+
+    // SHA-256 hex of the reset token emailed to the user, never the token itself
+    @Size(max = 64)
+    @Column(length = 64)
+    private String passwordResetToken;
+
+    private LocalDateTime passwordResetExpires;
+
+    // Deactivated accounts are kept rather than deleted, like Natours
+    @NotNull
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean active = true;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -65,4 +85,13 @@ public class User {
 
     @Version
     private Integer version;
+
+    // Emails are case-insensitive, so they are stored lowercase like Natours does
+    @PrePersist
+    @PreUpdate
+    private void normalizeEmail() {
+        if (email != null) {
+            email = email.trim().toLowerCase(Locale.ROOT);
+        }
+    }
 }
