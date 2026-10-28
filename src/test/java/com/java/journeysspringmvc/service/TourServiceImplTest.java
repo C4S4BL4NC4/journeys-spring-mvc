@@ -3,13 +3,16 @@ package com.java.journeysspringmvc.service;
 import com.java.journeysspringmvc.dto.TourDTO;
 import com.java.journeysspringmvc.entity.Difficulty;
 import com.java.journeysspringmvc.entity.Tour;
-import com.java.journeysspringmvc.mapper.TourMapperImpl;
+import com.java.journeysspringmvc.mapper.TourMapper;
 import com.java.journeysspringmvc.repository.TourRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.mapstruct.factory.Mappers;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 
@@ -20,8 +23,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({TourServiceImpl.class, TourMapperImpl.class})
+@Import(TourServiceImpl.class)
 class TourServiceImplTest {
+
+    // Built via MapStruct's factory so the test doesn't reference the generated TourMapperImpl directly
+    @TestConfiguration
+    static class MapperConfig {
+        @Bean
+        TourMapper tourMapper() {
+            return Mappers.getMapper(TourMapper.class);
+        }
+    }
 
     @Autowired
     TourService tourService;
