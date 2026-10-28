@@ -10,11 +10,14 @@
  *
  * After a token is verified:
  *   - KeycloakRealmRoleConverter turns its realm roles into ROLE_* authorities
- *   - CurrentUserSyncFilter mirrors the caller's profile into the users table
+ *   - CurrentUserSyncFilter mirrors the caller's profile into the users table and rejects
+ *     tokens of accounts deactivated since they were issued
  *
  * Access rules (first match wins):
- *   Swagger UI/docs, GET tours            public (secret tours only show up for tour managers)
- *   GET /api/v1/users/me                  any logged-in user
+ *   Swagger UI/docs, uploaded images      public
+ *   GET tours monthly-plan                Role.STAFF (GUIDE, LEAD_GUIDE, ADMIN)
+ *   other GET tours                       public (secret tours only show up for tour managers)
+ *   /api/v1/users/me and below            any logged-in user, acting on themselves
  *   create/update/delete tours            Role.TOUR_MANAGERS (ADMIN, LEAD_GUIDE)
  *   other /api/v1/users endpoints         ADMIN
  *   anything else                         any logged-in user
@@ -35,8 +38,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.ExceptionTranslationFilter;
 
 import java.util.Set;
 
@@ -44,6 +47,7 @@ import java.util.Set;
 public class SecurityConfig {
 
     private static final String[] TOURS = {TourController.TOUR_PATH, TourController.TOUR_PATH + "/**"};
+    private static final String MONTHLY_PLAN = TourController.TOUR_PATH + "/monthly-plan/**";
     private static final String[] USERS = {UserController.USER_PATH, UserController.USER_PATH + "/**"};
 
     @Bean
@@ -51,14 +55,17 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, WebConfig.IMAGE_URL_PREFIX + "**").permitAll()
+                        .requestMatchers(HttpMethod.GET, MONTHLY_PLAN).hasAnyAuthority(authorities(Role.STAFF))
                         .requestMatchers(HttpMethod.GET, TOURS).permitAll()
-                        .requestMatchers(HttpMethod.GET, UserController.ME_PATH).authenticated()
+                        .requestMatchers(UserController.ME_PATH, UserController.ME_PATH + "/**").authenticated()
                         .requestMatchers(TOURS).hasAnyAuthority(authorities(Role.TOUR_MANAGERS))
                         .requestMatchers(USERS).hasAuthority(Role.ADMIN.authority())
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-                .addFilterAfter(new CurrentUserSyncFilter(userService), BearerTokenAuthenticationFilter.class)
+                // After ExceptionTranslationFilter, so a deactivated account's rejection becomes a proper 401
+                .addFilterAfter(new CurrentUserSyncFilter(userService), ExceptionTranslationFilter.class)
                 // Stateless API with no session cookie, so CSRF tokens don't apply
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));

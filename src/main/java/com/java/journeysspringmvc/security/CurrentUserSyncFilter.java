@@ -1,14 +1,18 @@
 /*
- * Keeps the local users table in step with Keycloak ("just-in-time provisioning").
+ * Keeps the local users table in step with Keycloak ("just-in-time provisioning") and turns
+ * away deactivated accounts, like Natours' "protect" middleware.
  *
- * Runs on every request right after Spring Security has verified the bearer token. For a
+ * Runs on every request after Spring Security has verified the bearer token. For a
  * token-authenticated request it copies the caller's id ("sub"), name ("name"), email
  * ("email") and highest app role from the token into the users table via
  * UserService.syncUser. A user's first API call creates their profile, and later calls pick
  * up changes made in Keycloak. Anonymous requests pass straight through.
  *
- * A failed sync never fails the request: tokens without an email are skipped, and a clash
- * with another profile's email (e.g. a user deleted and re-created in Keycloak) is logged.
+ * If the account was deactivated after the token was issued (admin delete or deleteMe), the
+ * request is rejected with 401 invalid_token, even though the token itself is still valid.
+ * Tokens without an email or with a non-UUID subject are skipped, and a clash with another
+ * profile's email (e.g. a user deleted and re-created in Keycloak) is logged; neither fails
+ * the request.
  */
 package com.java.journeysspringmvc.security;
 
@@ -24,6 +28,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -63,10 +68,17 @@ public class CurrentUserSyncFilter extends OncePerRequestFilter {
             return;
         }
 
+        boolean active;
         try {
-            userService.syncUser(userId, displayName(jwt, email), email, Role.highestOf(KeycloakRealmRoleConverter.rolesOf(jwt)));
+            active = userService.syncUser(userId, displayName(jwt, email), email,
+                    Role.highestOf(KeycloakRealmRoleConverter.rolesOf(jwt)), jwt.getIssuedAt()).isPresent();
         } catch (DataIntegrityViolationException ex) {
             log.warn("Could not sync profile for {}: email {} belongs to another profile", userId, email);
+            return;
+        }
+        if (!active) {
+            // SecurityConfig places this filter after ExceptionTranslationFilter, which answers with a 401
+            throw new InvalidBearerTokenException("This account has been deactivated");
         }
     }
 

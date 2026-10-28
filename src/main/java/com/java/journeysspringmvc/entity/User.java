@@ -8,6 +8,8 @@
  *   - name, email and role are copied from the token claims by UserService.syncUser on the
  *     user's requests, so changes made in Keycloak show up on their next request
  *   - photo is app-owned data that Keycloak doesn't know about
+ *   - deactivatedAt is set when the account is deactivated (admin delete or deleteMe), which
+ *     also disables it in Keycloak; deactivated profiles are hidden, like Natours' active=false
  * Emails are trimmed and lowercased before every insert/update (normalizeEmail), so the
  * unique constraint treats emails case-insensitively. version provides optimistic locking.
  */
@@ -20,6 +22,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.UUID;
@@ -51,6 +54,8 @@ public class User {
     @Column(length = 20, nullable = false)
     private Role role = Role.USER;
 
+    private Instant deactivatedAt;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -61,6 +66,10 @@ public class User {
     // Also tells Spring Data whether the entity is new, since the id is assigned rather than generated
     @Version
     private Integer version;
+
+    public boolean isActive() {
+        return deactivatedAt == null;
+    }
 
     // Emails are case-insensitive, so they are stored lowercase like Natours does
     @PrePersist

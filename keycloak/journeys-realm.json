@@ -127,6 +127,23 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "journeys-backend",
+      "name": "Journeys API (service account)",
+      "description": "Confidential client the API uses to call Keycloak's admin API (change roles, disable accounts). The secret here is a dev value; use a generated one anywhere real.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "journeys-backend-dev-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "defaultClientScopes": [
+        "basic",
+        "roles"
+      ]
     }
   ],
   "users": [
@@ -229,6 +246,18 @@
         "default-roles-journeys",
         "USER"
       ]
+    },
+    {
+      "username": "service-account-journeys-backend",
+      "enabled": true,
+      "serviceAccountClientId": "journeys-backend",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "view-realm"
+        ]
+      }
     }
   ]
 }

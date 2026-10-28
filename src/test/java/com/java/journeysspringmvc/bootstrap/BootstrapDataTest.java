@@ -50,8 +50,9 @@ class BootstrapDataTest {
 
     @Test
     void seedsProfilesMatchingKeycloakRealm() throws Exception {
+        // People only; the realm also holds the API's service-account user, which has no email
         List<Map<String, Object>> realmUsers = JsonPath.read(
-                Files.readString(Path.of("keycloak/journeys-realm.json")), "$.users");
+                Files.readString(Path.of("keycloak/journeys-realm.json")), "$.users[?(@.email)]");
 
         assertThat(realmUsers).hasSize(5);
         for (Map<String, Object> realmUser : realmUsers) {

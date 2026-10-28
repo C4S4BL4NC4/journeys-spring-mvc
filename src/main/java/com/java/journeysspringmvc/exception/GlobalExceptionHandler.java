@@ -8,6 +8,7 @@
  *   BadRequestException               -> 400 (business rule broken, e.g. a guideId that isn't a guide,
  *                                             or sorting by a field that isn't allowed)
  *   DataIntegrityViolationException   -> 409 (unique constraint, e.g. a duplicate tour slug)
+ *   IdentityProviderException         -> 502 (Keycloak's admin API failed)
  * Extending ResponseEntityExceptionHandler also covers Spring MVC's own errors, such as failed
  * @Validated bodies, unreadable JSON or a malformed UUID in the path, which all become 400s.
  * Anything else is a bug and stays a 500.
@@ -32,6 +33,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(BadRequestException.class)
     ProblemDetail handleBadRequest(BadRequestException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(IdentityProviderException.class)
+    ProblemDetail handleIdentityProvider(IdentityProviderException ex) {
+        logger.error("Identity provider call failed", ex);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, "The identity provider could not complete the request");
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

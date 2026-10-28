@@ -2,8 +2,9 @@
 #
 # keycloak  identity provider for the Journeys API (http://localhost:9090)
 #           - admin console: http://localhost:9090/admin  (admin / admin)
-#           - imports ./keycloak/journeys-realm.json on first start: roles, clients and the
-#             seed users (password "password123"), whose ids match BootstrapData's users
+#           - imports ./keycloak/journeys-realm.json on first start: roles, clients (incl. the
+#             API's journeys-backend service account) and the seed users (password
+#             "password123"), whose ids match BootstrapData's users
 #           - start-dev keeps Keycloak's own data in the container; recreating the container
 #             resets the realm to the JSON file
 services:

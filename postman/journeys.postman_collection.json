@@ -1,0 +1,1796 @@
+{
+	"info": {
+		"_postman_id": "fcfb8a11-6936-4581-985b-49d923b49a72",
+		"name": "natours",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "48784274",
+		"_collection_link": "https://go.postman.co/collection/48784274-fcfb8a11-6936-4581-985b-49d923b49a72?source=collection_link",
+		"description": "Users and Tours run against the Spring Boot API (baseUrl) with Keycloak (keycloakUrl).\n\n1. docker compose up -d   (Keycloak on :9090)\n2. ./mvnw spring-boot:run (API on :8080)\n3. Run the Users and Tours folders top to bottom (Collection Runner, or Newman:\n   npx newman run postman/journeys.postman_collection.json --folder Users --folder Tours --working-dir postman)\n\nTokens for the seed accounts are fetched and refreshed automatically by the collection pre-request script. Upload requests use postman/sample-image.jpg; in the Postman app set Settings > Working directory to the postman/ folder (or reselect the file).\n\nReviews, Tours/Reviews and Booking are the original Natours requests and are not ported yet."
+	},
+	"item": [
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Auth - Keycloak",
+					"item": [
+						{
+							"name": "Keycloak Admin Token (dev)",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{keycloakUrl}}/realms/master/protocol/openid-connect/token",
+								"auth": {
+									"type": "noauth"
+								},
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": [
+										{
+											"key": "grant_type",
+											"value": "password",
+											"type": "text"
+										},
+										{
+											"key": "client_id",
+											"value": "admin-cli",
+											"type": "text"
+										},
+										{
+											"key": "username",
+											"value": "{{keycloakAdminUser}}",
+											"type": "text"
+										},
+										{
+											"key": "password",
+											"value": "{{keycloakAdminPassword}}",
+											"type": "text"
+										}
+									]
+								},
+								"description": "Dev-only: logs in to Keycloak's master realm (admin/admin from docker-compose.yml) so the next requests can manage accounts the way the Natours signup and password-reset endpoints used to."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Got a Keycloak master-realm admin token\", () => pm.response.to.have.status(200));",
+											"pm.collectionVariables.set(\"kcAdminToken\", pm.response.json().access_token);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Signup",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{keycloakUrl}}/admin/realms/{{realm}}/users",
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{kcAdminToken}}",
+											"type": "string"
+										}
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"{{newUserEmail}}\",\n    \"email\": \"{{newUserEmail}}\",\n    \"emailVerified\": true,\n    \"enabled\": true,\n    \"firstName\": \"Saddam\",\n    \"lastName\": \"{{newuserLastName}}\",\n    \"credentials\": [{ \"type\": \"password\", \"value\": \"{{seedPassword}}\", \"temporary\": false }]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"description": "In production users sign up on Keycloak's own registration page ({{keycloakUrl}}/realms/{{realm}}/account). For automation this creates the account through Keycloak's admin REST API (dev master-realm admin)."
+							},
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"// A fresh, unique account every run",
+											"const suffix = Date.now().toString(36);",
+											"pm.collectionVariables.set(\"newUserEmail\", `newuser.${suffix}@example.com`);",
+											"pm.collectionVariables.set(\"newuserLastName\", `Tester-${suffix}`);"
+										]
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Keycloak created the account\", () => pm.response.to.have.status(201));",
+											"// Keycloak returns the new user's URL; its last segment is the Keycloak id the API uses everywhere",
+											"const location = pm.response.headers.get(\"Location\");",
+											"pm.collectionVariables.set(\"newUserId\", location.substring(location.lastIndexOf(\"/\") + 1));"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Signup Second User",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{keycloakUrl}}/admin/realms/{{realm}}/users",
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{kcAdminToken}}",
+											"type": "string"
+										}
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"{{secondUserEmail}}\",\n    \"email\": \"{{secondUserEmail}}\",\n    \"emailVerified\": true,\n    \"enabled\": true,\n    \"firstName\": \"Sam\",\n    \"lastName\": \"{{seconduserLastName}}\",\n    \"credentials\": [{ \"type\": \"password\", \"value\": \"{{seedPassword}}\", \"temporary\": false }]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"description": "In production users sign up on Keycloak's own registration page ({{keycloakUrl}}/realms/{{realm}}/account). For automation this creates the account through Keycloak's admin REST API (dev master-realm admin)."
+							},
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"// A fresh, unique account every run",
+											"const suffix = Date.now().toString(36);",
+											"pm.collectionVariables.set(\"secondUserEmail\", `seconduser.${suffix}@example.com`);",
+											"pm.collectionVariables.set(\"seconduserLastName\", `Tester-${suffix}`);"
+										]
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Keycloak created the account\", () => pm.response.to.have.status(201));",
+											"// Keycloak returns the new user's URL; its last segment is the Keycloak id the API uses everywhere",
+											"const location = pm.response.headers.get(\"Location\");",
+											"pm.collectionVariables.set(\"secondUserId\", location.substring(location.lastIndexOf(\"/\") + 1));"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Login as New User",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+								"auth": {
+									"type": "noauth"
+								},
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": [
+										{
+											"key": "grant_type",
+											"value": "password",
+											"type": "text"
+										},
+										{
+											"key": "client_id",
+											"value": "{{devClientId}}",
+											"type": "text"
+										},
+										{
+											"key": "username",
+											"value": "{{newUserEmail}}",
+											"type": "text"
+										},
+										{
+											"key": "password",
+											"value": "{{seedPassword}}",
+											"type": "text"
+										}
+									]
+								}
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Keycloak issued an access token\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().access_token).to.be.a(\"string\");",
+											"});",
+											"const body = pm.response.json();",
+											"pm.collectionVariables.set(\"newUserToken\", body.access_token);",
+											"pm.collectionVariables.set(\"newUserTokenExpiresAt\", Date.now() + body.expires_in * 1000);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Login as Admin",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+								"auth": {
+									"type": "noauth"
+								},
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": [
+										{
+											"key": "grant_type",
+											"value": "password",
+											"type": "text"
+										},
+										{
+											"key": "client_id",
+											"value": "{{devClientId}}",
+											"type": "text"
+										},
+										{
+											"key": "username",
+											"value": "{{adminEmail}}",
+											"type": "text"
+										},
+										{
+											"key": "password",
+											"value": "{{seedPassword}}",
+											"type": "text"
+										}
+									]
+								},
+								"description": "Seed admin from keycloak/journeys-realm.json. Tokens are also fetched automatically by the collection's pre-request script."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Keycloak issued an access token\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().access_token).to.be.a(\"string\");",
+											"});",
+											"const body = pm.response.json();",
+											"pm.collectionVariables.set(\"adminToken\", body.access_token);",
+											"pm.collectionVariables.set(\"adminTokenExpiresAt\", Date.now() + body.expires_in * 1000);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Login as Lead Guide",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+								"auth": {
+									"type": "noauth"
+								},
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": [
+										{
+											"key": "grant_type",
+											"value": "password",
+											"type": "text"
+										},
+										{
+											"key": "client_id",
+											"value": "{{devClientId}}",
+											"type": "text"
+										},
+										{
+											"key": "username",
+											"value": "{{leadGuideEmail}}",
+											"type": "text"
+										},
+										{
+											"key": "password",
+											"value": "{{seedPassword}}",
+											"type": "text"
+										}
+									]
+								}
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Keycloak issued an access token\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().access_token).to.be.a(\"string\");",
+											"});",
+											"const body = pm.response.json();",
+											"pm.collectionVariables.set(\"leadGuideToken\", body.access_token);",
+											"pm.collectionVariables.set(\"leadGuideTokenExpiresAt\", Date.now() + body.expires_in * 1000);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Login as User (Jane)",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+								"auth": {
+									"type": "noauth"
+								},
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": [
+										{
+											"key": "grant_type",
+											"value": "password",
+											"type": "text"
+										},
+										{
+											"key": "client_id",
+											"value": "{{devClientId}}",
+											"type": "text"
+										},
+										{
+											"key": "username",
+											"value": "{{userEmail}}",
+											"type": "text"
+										},
+										{
+											"key": "password",
+											"value": "{{seedPassword}}",
+											"type": "text"
+										}
+									]
+								}
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Keycloak issued an access token\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().access_token).to.be.a(\"string\");",
+											"});",
+											"const body = pm.response.json();",
+											"pm.collectionVariables.set(\"userToken\", body.access_token);",
+											"pm.collectionVariables.set(\"userTokenExpiresAt\", Date.now() + body.expires_in * 1000);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Login as Second User",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+								"auth": {
+									"type": "noauth"
+								},
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": [
+										{
+											"key": "grant_type",
+											"value": "password",
+											"type": "text"
+										},
+										{
+											"key": "client_id",
+											"value": "{{devClientId}}",
+											"type": "text"
+										},
+										{
+											"key": "username",
+											"value": "{{secondUserEmail}}",
+											"type": "text"
+										},
+										{
+											"key": "password",
+											"value": "{{seedPassword}}",
+											"type": "text"
+										}
+									]
+								}
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Keycloak issued an access token\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().access_token).to.be.a(\"string\");",
+											"});",
+											"const body = pm.response.json();",
+											"pm.collectionVariables.set(\"secondUserToken\", body.access_token);",
+											"pm.collectionVariables.set(\"secondUserTokenExpiresAt\", Date.now() + body.expires_in * 1000);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Reset Password (Keycloak admin)",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"url": "{{keycloakUrl}}/admin/realms/{{realm}}/users/{{newUserId}}/reset-password",
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{kcAdminToken}}",
+											"type": "string"
+										}
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"password\",\n    \"value\": \"{{newPassword}}\",\n    \"temporary\": false\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"description": "Replaces Natours' forgotPassword/resetPassword/updateMyPassword. In production users click \"Forgot password?\" on Keycloak's login page (needs SMTP) or change it in the account console; this dev shortcut sets it through the admin API."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Password reset\", () => pm.response.to.have.status(204));"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Login with New Password",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+								"auth": {
+									"type": "noauth"
+								},
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": [
+										{
+											"key": "grant_type",
+											"value": "password",
+											"type": "text"
+										},
+										{
+											"key": "client_id",
+											"value": "{{devClientId}}",
+											"type": "text"
+										},
+										{
+											"key": "username",
+											"value": "{{newUserEmail}}",
+											"type": "text"
+										},
+										{
+											"key": "password",
+											"value": "{{newPassword}}",
+											"type": "text"
+										}
+									]
+								}
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Keycloak issued an access token\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().access_token).to.be.a(\"string\");",
+											"});",
+											"const body = pm.response.json();",
+											"pm.collectionVariables.set(\"newUserToken\", body.access_token);",
+											"pm.collectionVariables.set(\"newUserTokenExpiresAt\", Date.now() + body.expires_in * 1000);"
+										]
+									}
+								}
+							]
+						}
+					],
+					"description": "Accounts live in Keycloak, so signup, login and password changes go to Keycloak's endpoints, not the API. Logins use the dev-only journeys-dev-cli client (password grant)."
+				},
+				{
+					"name": "Self - Private",
+					"item": [
+						{
+							"name": "getMe",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users/me",
+								"description": "The API mirrors a Keycloak user into its users table on their first request."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"First call creates the local profile from the token\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"newUserId\"));",
+											"    pm.expect(pm.response.json().email).to.eql(pm.collectionVariables.get(\"newUserEmail\"));",
+											"    pm.expect(pm.response.json().role).to.eql(\"USER\");",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "updateMe - Upload Photo",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users/me/photo",
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "photo",
+											"type": "file",
+											"src": "sample-image.jpg"
+										}
+									]
+								},
+								"description": "Multipart upload of \"photo\"; resized to 500x500 JPEG like Natours. Name and email are edited in Keycloak's account console. In the Postman app, point the file at postman/sample-image.jpg (or set Postman's working directory to postman/)."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Photo stored and resized\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().photo).to.match(/^user-.*\\.jpeg$/);",
+											"});",
+											"pm.collectionVariables.set(\"newUserPhoto\", pm.response.json().photo);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "View My Photo",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/img/users/{{newUserPhoto}}",
+								"auth": {
+									"type": "noauth"
+								}
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Photo is served publicly as JPEG\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"image/jpeg\");",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "deleteMe",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users/me",
+								"description": "Deactivates the caller: disabled in Keycloak and hidden in the API."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Account deactivated\", () => pm.response.to.have.status(204));"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "getMe after deleteMe",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users/me"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"The still-unexpired token is rejected\", () => pm.response.to.have.status(401));"
+										]
+									}
+								}
+							]
+						}
+					],
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{newUserToken}}",
+								"type": "string"
+							}
+						]
+					}
+				},
+				{
+					"name": "Admin Tools - Private",
+					"item": [
+						{
+							"name": "Second User Signs In (creates profile)",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users/me",
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{secondUserToken}}",
+											"type": "string"
+										}
+									]
+								},
+								"description": "Admin endpoints act on users the API already knows, i.e. who have called it once."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Profile created\", () => pm.response.to.have.status(200));"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Get All Users",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users?role=lead-guide&sort=name"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Lists users filtered by role (Natours spelling accepted)\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    const users = pm.response.json().content;",
+											"    pm.expect(users.length).to.be.above(0);",
+											"    users.forEach(user => pm.expect(user.role).to.eql(\"LEAD_GUIDE\"));",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Get User via ID",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users/{{secondUserId}}"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Found\", () => pm.response.to.have.status(200));"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Admin: Update User",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users/{{secondUserId}}",
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"role\": \"guide\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"description": "Only the role is changed through the API; it's applied in Keycloak by the API's journeys-backend service account."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Role changed in Keycloak and the API\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().role).to.eql(\"GUIDE\");",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Admin: Delete User",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users/{{secondUserId}}"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Deactivated\", () => pm.response.to.have.status(204));"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Get Deleted User",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/users/{{secondUserId}}"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Deactivated users are hidden\", () => pm.response.to.have.status(404));"
+										]
+									}
+								}
+							]
+						}
+					],
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{adminToken}}",
+								"type": "string"
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "Tours",
+			"item": [
+				{
+					"name": "Public",
+					"item": [
+						{
+							"name": "Get All the Tours",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Lists tours as a page, secret ones hidden\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    const body = pm.response.json();",
+											"    pm.expect(body.content.length).to.be.above(0);",
+											"    pm.expect(body.page).to.have.keys(\"size\", \"number\", \"totalElements\", \"totalPages\");",
+											"    body.content.forEach(tour => pm.expect(tour.secretTour).to.eql(false));",
+											"});",
+											"pm.collectionVariables.set(\"publicTourId\", pm.response.json().content[0].id);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Get Tour via ID",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours/{{publicTourId}}"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Found\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"publicTourId\"));",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Query Filter String",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours?minDuration=5&difficulty=easy&sort=price&size=10",
+								"description": "Natours' ?duration[gte]=5&limit=10 becomes ?minDuration=5&size=10. Other filters: name, maxDuration, minPrice, maxPrice, minRating, maxGroupSize."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Filters by duration and difficulty\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    const tours = pm.response.json().content;",
+											"    pm.expect(tours.length).to.be.above(0);",
+											"    tours.forEach(tour => {",
+											"        pm.expect(tour.duration).to.be.at.least(5);",
+											"        pm.expect(tour.difficulty).to.eql(\"EASY\");",
+											"    });",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Price Sorting",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours?sort=price,desc&sort=maxGroupSize",
+								"description": "Spring's sort syntax: sort=field[,asc|desc], repeatable. Natours' -price is sort=price,desc."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Sorted by price, highest first\", () => {",
+											"    const prices = pm.response.json().content.map(tour => tour.price);",
+											"    pm.expect(prices).to.eql([...prices].sort((a, b) => b - a));",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Page and Limit Testing",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours?page=1&size=2&sort=name",
+								"description": "Pages start at 0; size is capped at 100."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Second page of two\", () => {",
+											"    const page = pm.response.json().page;",
+											"    pm.expect(page.number).to.eql(1);",
+											"    pm.expect(page.size).to.eql(2);",
+											"    pm.expect(pm.response.json().content.length).to.be.at.most(2);",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Top 5 Cheap Tours",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours/top-5-cheap"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"At most five, best rated first\", () => {",
+											"    const tours = pm.response.json();",
+											"    pm.expect(tours.length).to.be.within(1, 5);",
+											"    const ratings = tours.map(tour => tour.averageRating ?? 0);",
+											"    pm.expect(ratings).to.eql([...ratings].sort((a, b) => b - a));",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Tour Stats",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours/stats",
+								"description": "Tours rated 4.5 or higher by default; change with ?minRating=."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Stats per difficulty\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.response.json().forEach(row => pm.expect(row).to.include.keys(\"difficulty\", \"numTours\", \"avgPrice\", \"minPrice\", \"maxPrice\"));",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Tours Within Radius",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours/tours-within/400/center/34.111745,-118.113491/unit/mi"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Finds the tour starting in Las Vegas (about 230 mi away)\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    pm.expect(pm.response.json().map(tour => tour.name)).to.include(\"The Park Camper\");",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Get Distances to Tours From Point",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours/distances/34.111745,-118.113491/unit/km"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Distances in km, nearest first\", () => {",
+											"    const distances = pm.response.json().map(row => row.distance);",
+											"    pm.expect(distances.length).to.be.above(0);",
+											"    pm.expect(distances).to.eql([...distances].sort((a, b) => a - b));",
+											"});"
+										]
+									}
+								}
+							]
+						}
+					],
+					"auth": {
+						"type": "noauth"
+					},
+					"description": "No token needed. Secret tours only appear for tour managers."
+				},
+				{
+					"name": "Private",
+					"item": [
+						{
+							"name": "Post Test Tour",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours",
+								"body": {
+									"mode": "raw",
+									"raw": "{}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"// Random realistic tour (the original Natours script, with its out-of-range suffix index fixed)",
+											"const tourNames = [",
+											"    \"Fuji Mountain Climbing Expedition\", \"Amazon Rainforest Adventure\", \"Grand Canyon Exploration\",",
+											"    \"Santorini Sunset Tour\", \"Machu Picchu Trek\", \"Northern Lights Chase\", \"Great Barrier Reef Dive\",",
+											"    \"African Safari Experience\", \"Italian Coastal Hike\", \"Bali Cultural Journey\", \"Swiss Alps Tour\",",
+											"    \"Egyptian Pyramids Discovery\", \"Thai Island Hopping\", \"Norwegian Fjords Cruise\", \"Iceland Glacier Walk\",",
+											"    \"Patagonia Wilderness Trek\", \"Japanese Temple Tour\", \"Greek Island Sailing\", \"Canadian Rockies Trip\",",
+											"    \"Moroccan Desert Safari\", \"Vietnam Food Tour\", \"Spanish Camino Walk\", \"Himalayan Mountain Trek\"",
+											"];",
+											"const pick = list => list[Math.floor(Math.random() * list.length)];",
+											"// Names are limited to 50 characters; a time-based suffix keeps each run's slug unique",
+											"const name = `${pick(tourNames)} ${pick([\"Tour\", \"Ride\", \"Hike\", \"Dive\", \"Glide\"])} ${Date.now().toString(36)}`.substring(0, 50);",
+											"pm.collectionVariables.set(\"newTourName\", name);",
+											"pm.request.body.raw = JSON.stringify({",
+											"    name,",
+											"    price: Math.floor(400 + Math.random() * 1000),",
+											"    summary: `Experience the amazing ${name} with breathtaking views and unforgettable adventures`,",
+											"    duration: Math.floor(Math.random() * 14) + 1,",
+											"    maxGroupSize: Math.floor(Math.random() * 10) + 5,",
+											"    difficulty: pick([\"easy\", \"medium\", \"difficult\"]),",
+											"    imageCover: \"placeholder.jpg\",",
+											"    startLocation: { latitude: 34.0522, longitude: -118.2437, address: \"Los Angeles, CA, USA\", description: \"Los Angeles\" },",
+											"    startDates: [`${new Date().getFullYear() + 1}-06-01T09:00:00`]",
+											"});"
+										]
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Tour created with a generated slug\", () => {",
+											"    pm.response.to.have.status(201);",
+											"    pm.expect(pm.response.headers.get(\"Location\")).to.include(pm.response.json().id);",
+											"    pm.expect(pm.response.json().slug).to.match(/^[a-z0-9-]+$/);",
+											"});",
+											"pm.collectionVariables.set(\"tourId\", pm.response.json().id);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "PATCH Tour via ID",
+							"request": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/merge-patch+json"
+									}
+								],
+								"url": "{{baseUrl}}/api/v1/tours/{{tourId}}",
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"price\": 999,\n    \"summary\": \"Updated through a JSON Merge Patch\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"description": "Send only the fields to change; null clears a field. Images are uploaded separately."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Only the sent fields changed\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    const tour = pm.response.json();",
+											"    pm.expect(tour.price).to.eql(999);",
+											"    pm.expect(tour.name).to.eql(pm.collectionVariables.get(\"newTourName\"));",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Upload Tour Images",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours/{{tourId}}/images",
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "imageCover",
+											"type": "file",
+											"src": "sample-image.jpg"
+										},
+										{
+											"key": "images",
+											"type": "file",
+											"src": "sample-image.jpg"
+										},
+										{
+											"key": "images",
+											"type": "file",
+											"src": "sample-image.jpg"
+										}
+									]
+								},
+								"description": "Multipart: imageCover (1 file) and/or images (up to 3), resized to 2000x1333 JPEG like Natours. Served at /img/tours/<name>."
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Cover and images stored and resized\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    const tour = pm.response.json();",
+											"    pm.expect(tour.imageCover).to.match(/-cover\\.jpeg$/);",
+											"    pm.expect(tour.images).to.have.lengthOf(2);",
+											"});",
+											"pm.collectionVariables.set(\"tourCover\", pm.response.json().imageCover);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "View Tour Cover",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/img/tours/{{tourCover}}",
+								"auth": {
+									"type": "noauth"
+								}
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Served publicly\", () => pm.response.to.have.status(200));"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Monthly Plan",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours/monthly-plan/{{planYear}}",
+								"description": "Staff only (GUIDE, LEAD_GUIDE, ADMIN). The seed tours depart next year."
+							},
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.collectionVariables.set(\"planYear\", new Date().getFullYear() + 1);"
+										]
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Departures per month, busiest first\", () => {",
+											"    pm.response.to.have.status(200);",
+											"    const counts = pm.response.json().map(row => row.numTourStarts);",
+											"    pm.expect(counts.length).to.be.above(0);",
+											"    pm.expect(counts).to.eql([...counts].sort((a, b) => b - a));",
+											"});"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Delete tour id",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours/{{tourId}}"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Deleted\", () => pm.response.to.have.status(204));"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Get Deleted Tour",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{baseUrl}}/api/v1/tours/{{tourId}}"
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"pm.test(\"Gone\", () => pm.response.to.have.status(404));"
+										]
+									}
+								}
+							]
+						}
+					],
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{leadGuideToken}}",
+								"type": "string"
+							}
+						]
+					},
+					"description": "Tour management needs a LEAD_GUIDE or ADMIN token."
+				}
+			]
+		},
+		{
+			"name": "Reviews",
+			"item": [
+				{
+					"name": "Private",
+					"item": [
+						{
+							"name": "create a review",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{authToken}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"rating\": 2,\n    \"review\": \"mid\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{URL}}api/v1/tours/5c88fa8cf4afda39709c2955/reviews",
+									"host": [
+										"{{URL}}api"
+									],
+									"path": [
+										"v1",
+										"tours",
+										"5c88fa8cf4afda39709c2955",
+										"reviews"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Review",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"rating\": 4.1,\n    \"review\": \"AMAZING. AMAZING. AHHHH!\"\n}"
+								},
+								"url": {
+									"raw": "{{URL}}api/v1/reviews/6925284871816a9a512538f1",
+									"host": [
+										"{{URL}}api"
+									],
+									"path": [
+										"v1",
+										"reviews",
+										"6925284871816a9a512538f1"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update a review via ID",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{authToken}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"rating\": 3,\n    \"review\": \"cmon man\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{URL}}api/v1/reviews/6925284871816a9a512538f1",
+									"host": [
+										"{{URL}}api"
+									],
+									"path": [
+										"v1",
+										"reviews",
+										"6925284871816a9a512538f1"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "List all reviews",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{URL}}api/v1/reviews",
+							"host": [
+								"{{URL}}api"
+							],
+							"path": [
+								"v1",
+								"reviews"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get a review via ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{URL}}api/v1/reviews/69007f4b95974f8a19cef020",
+							"host": [
+								"{{URL}}api"
+							],
+							"path": [
+								"v1",
+								"reviews",
+								"69007f4b95974f8a19cef020"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Tours/Reviews",
+			"item": [
+				{
+					"name": "Post a review with a tour Id",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"rating\": 4,\n    \"review\": \"Oki Doki!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{URL}}api/v1/tours/5c88fa8cf4afda39709c295a/reviews",
+							"host": [
+								"{{URL}}api"
+							],
+							"path": [
+								"v1",
+								"tours",
+								"5c88fa8cf4afda39709c295a",
+								"reviews"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get reviews of a tour",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"rating\": 4.1,\n    \"review\": \"AMAZING. AMAZING. AHHHH!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{URL}}api/v1/tours/5c88fa8cf4afda39709c2961/reviews",
+							"host": [
+								"{{URL}}api"
+							],
+							"path": [
+								"v1",
+								"tours",
+								"5c88fa8cf4afda39709c2961",
+								"reviews"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Booking",
+			"item": [
+				{
+					"name": "User Tour Booking",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"Sam Porter6\",\r\n    \"email\": \"sam@6bridges.com\",\r\n    \"password\": \"test1234\",\r\n    \"passwordConfirm\": \"test1234\"\r\n}"
+						},
+						"url": {
+							"raw": "{{URL}}api/v1/bookings/checkout-session/5c88fa8cf4afda39709c2955",
+							"host": [
+								"{{URL}}api"
+							],
+							"path": [
+								"v1",
+								"bookings",
+								"checkout-session",
+								"5c88fa8cf4afda39709c2955"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Keeps the seed accounts' Keycloak tokens fresh for requests to the API. Access tokens live",
+					"// 5 minutes; this refreshes any that expire within 30 seconds, so the folders can simply use",
+					"// {{adminToken}}, {{leadGuideToken}} and {{userToken}}.",
+					"(function refreshTokens() {",
+					"const rawUrl = pm.request.url.toString();",
+					"if (!rawUrl.includes(\"{{baseUrl}}\") && !rawUrl.startsWith(pm.collectionVariables.get(\"baseUrl\"))) {",
+					"    return;",
+					"}",
+					"const tokenUrl = `${pm.collectionVariables.get(\"keycloakUrl\")}/realms/${pm.collectionVariables.get(\"realm\")}/protocol/openid-connect/token`;",
+					"const accounts = { adminToken: \"adminEmail\", leadGuideToken: \"leadGuideEmail\", userToken: \"userEmail\" };",
+					"Object.entries(accounts).forEach(([tokenVar, emailVar]) => {",
+					"    if (Number(pm.collectionVariables.get(`${tokenVar}ExpiresAt`) || 0) > Date.now() + 30000) {",
+					"        return;",
+					"    }",
+					"    pm.sendRequest({",
+					"        url: tokenUrl,",
+					"        method: \"POST\",",
+					"        header: { \"Content-Type\": \"application/x-www-form-urlencoded\" },",
+					"        body: {",
+					"            mode: \"urlencoded\",",
+					"            urlencoded: [",
+					"                { key: \"grant_type\", value: \"password\" },",
+					"                { key: \"client_id\", value: pm.collectionVariables.get(\"devClientId\") },",
+					"                { key: \"username\", value: pm.collectionVariables.get(emailVar) },",
+					"                { key: \"password\", value: pm.collectionVariables.get(\"seedPassword\") }",
+					"            ]",
+					"        }",
+					"    }, (error, response) => {",
+					"        if (error || response.code !== 200) {",
+					"            console.error(`Could not get ${tokenVar}; is Keycloak running (docker compose up -d)?`, error || response.text());",
+					"            return;",
+					"        }",
+					"        const body = response.json();",
+					"        pm.collectionVariables.set(tokenVar, body.access_token);",
+					"        pm.collectionVariables.set(`${tokenVar}ExpiresAt`, Date.now() + body.expires_in * 1000);",
+					"    });",
+					"});",
+					"})();"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string",
+			"description": "The Spring API"
+		},
+		{
+			"key": "keycloakUrl",
+			"value": "http://localhost:9090",
+			"type": "string",
+			"description": "Keycloak from docker-compose.yml"
+		},
+		{
+			"key": "realm",
+			"value": "journeys",
+			"type": "string"
+		},
+		{
+			"key": "devClientId",
+			"value": "journeys-dev-cli",
+			"type": "string",
+			"description": "Dev-only Keycloak client that allows the password grant"
+		},
+		{
+			"key": "adminEmail",
+			"value": "admin@journeys.dev",
+			"type": "string",
+			"description": "Seed users from keycloak/journeys-realm.json"
+		},
+		{
+			"key": "leadGuideEmail",
+			"value": "lead.guide@journeys.dev",
+			"type": "string"
+		},
+		{
+			"key": "userEmail",
+			"value": "jane@journeys.dev",
+			"type": "string"
+		},
+		{
+			"key": "seedPassword",
+			"value": "password123",
+			"type": "string"
+		},
+		{
+			"key": "newPassword",
+			"value": "newPassword123",
+			"type": "string"
+		},
+		{
+			"key": "keycloakAdminUser",
+			"value": "admin",
+			"type": "string",
+			"description": "Keycloak master-realm admin (docker-compose.yml), dev only"
+		},
+		{
+			"key": "keycloakAdminPassword",
+			"value": "admin",
+			"type": "string"
+		},
+		{
+			"key": "adminToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "leadGuideToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "userToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "kcAdminToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "newUserEmail",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "newUserId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "newUserToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "newUserPhoto",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "secondUserEmail",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "secondUserId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "secondUserToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "publicTourId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "tourId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "newTourName",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "tourCover",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "planYear",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "bearer_token_0djx",
+			"secret": true
+		}
+	]
+}

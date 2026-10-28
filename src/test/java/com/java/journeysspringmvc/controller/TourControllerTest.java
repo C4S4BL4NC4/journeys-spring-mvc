@@ -8,6 +8,10 @@
  *   - filters bind into a TourFilter and paging/sorting into a Pageable (with the default
  *     newest-first sort and the max page size applied), and the paged JSON shape
  *   - secret tours are requested only for tour managers (LEAD_GUIDE/ADMIN tokens)
+ *   - Natours-style enum spellings (?difficulty=easy, "difficulty": "easy") are accepted
+ *   - PATCH merges only the given fields (JSON Merge Patch) and re-validates the result
+ *   - image uploads (multipart), and the Natours extras: top-5-cheap, stats, monthly plan
+ *     (staff only), tours-within and distances, including bad coordinates and units
  *   - status codes: 200, 201 + Location header, 204, 400 (invalid body, malformed id,
  *     business rule), 404 (unknown tour) and 409 (duplicate slug)
  *   - reading tours is public; writing without a token gives 401, and with a token whose
@@ -18,6 +22,13 @@ package com.java.journeysspringmvc.controller;
 import com.java.journeysspringmvc.config.SecurityConfig;
 import com.java.journeysspringmvc.dto.TourDTO;
 import com.java.journeysspringmvc.dto.TourFilter;
+import com.java.journeysspringmvc.geo.DistanceUnit;
+import com.java.journeysspringmvc.geo.GeoPoint;
+import com.java.journeysspringmvc.storage.ImageService;
+import com.java.journeysspringmvc.util.JsonMergePatcher;
+import org.mockito.ArgumentCaptor;
+import org.springframework.http.HttpMethod;
+import org.springframework.mock.web.MockMultipartFile;
 import com.java.journeysspringmvc.entity.Difficulty;
 import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.exception.BadRequestException;
@@ -36,6 +47,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.AbstractMockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.math.BigDecimal;
@@ -43,6 +55,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
@@ -54,7 +69,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(TourController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, JsonMergePatcher.class})
 class TourControllerTest {
 
     private static final String VALID_TOUR = """
@@ -78,6 +93,9 @@ class TourControllerTest {
 
     @MockitoBean
     TourService tourService;
+
+    @MockitoBean
+    ImageService imageService;
 
     private TourDTO tourDTO(UUID id) {
         return new TourDTO(id, "The Forest Hiker", "the-forest-hiker", 5, 25, Difficulty.EASY, 4.7, 37,
@@ -277,5 +295,146 @@ class TourControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verify(tourService, never()).deleteTour(any());
+    }
+
+    // Like asRole, but leaves the content type alone (multipart requests set their own)
+    private <B extends AbstractMockHttpServletRequestBuilder<B>> B withRole(B request, Role role) {
+        return request.with(jwt().authorities(new SimpleGrantedAuthority(role.authority())));
+    }
+
+    @Test
+    void acceptsNatoursStyleDifficulty() throws Exception {
+        given(tourService.listTours(any(), anyBoolean(), any())).willReturn(Page.empty());
+        given(tourService.saveNewTour(any())).willReturn(tourDTO(UUID.randomUUID()));
+
+        mockMvc.perform(get(TourController.TOUR_PATH).param("difficulty", "easy")).andExpect(status().isOk());
+        mockMvc.perform(asAdmin(post(TourController.TOUR_PATH)).content(VALID_TOUR.replace("\"EASY\"", "\"easy\"")))
+                .andExpect(status().isCreated());
+
+        verify(tourService).listTours(eq(new TourFilter(null, Difficulty.EASY, null, null, null, null, null, null)), eq(false), any());
+        ArgumentCaptor<TourDTO> created = ArgumentCaptor.forClass(TourDTO.class);
+        verify(tourService).saveNewTour(created.capture());
+        assertThat(created.getValue().difficulty()).isEqualTo(Difficulty.EASY);
+    }
+
+    @Test
+    void patchesOnlyTheGivenFields() throws Exception {
+        UUID id = UUID.randomUUID();
+        given(tourService.getTourById(id, true)).willReturn(Optional.of(tourDTO(id)));
+        given(tourService.updateTour(eq(id), any())).willReturn(Optional.of(tourDTO(id)));
+
+        mockMvc.perform(asAdmin(patch(TourController.TOUR_PATH_ID, id))
+                        .contentType("application/merge-patch+json")
+                        .content("""
+                                { "price": 999, "difficulty": "medium", "description": "Now with more trees" }
+                                """))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<TourDTO> patched = ArgumentCaptor.forClass(TourDTO.class);
+        verify(tourService).updateTour(eq(id), patched.capture());
+        assertThat(patched.getValue())
+                .extracting(TourDTO::name, TourDTO::price, TourDTO::difficulty, TourDTO::description, TourDTO::summary)
+                .containsExactly("The Forest Hiker", new BigDecimal("999"), Difficulty.MEDIUM, "Now with more trees", "Breathtaking hike");
+    }
+
+    @Test
+    void rejectsPatchThatBreaksValidation() throws Exception {
+        UUID id = UUID.randomUUID();
+        given(tourService.getTourById(id, true)).willReturn(Optional.of(tourDTO(id)));
+
+        mockMvc.perform(asAdmin(patch(TourController.TOUR_PATH_ID, id)).content("""
+                        { "price": -5, "summary": null }
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(allOf(
+                        containsString("price"), containsString("summary"))));
+
+        verify(tourService, never()).updateTour(any(), any());
+    }
+
+    @Test
+    void forbidsPatchForNonManagers() throws Exception {
+        mockMvc.perform(asRole(patch(TourController.TOUR_PATH_ID, UUID.randomUUID()), Role.GUIDE).content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void uploadsTourImages() throws Exception {
+        UUID id = UUID.randomUUID();
+        given(tourService.getTourById(id, true)).willReturn(Optional.of(tourDTO(id)));
+        given(imageService.saveTourCover(eq(id), any())).willReturn("cover.jpeg");
+        given(imageService.saveTourImages(eq(id), any())).willReturn(List.of("1.jpeg", "2.jpeg"));
+        given(tourService.updateImages(id, "cover.jpeg", List.of("1.jpeg", "2.jpeg"))).willReturn(Optional.of(tourDTO(id)));
+
+        mockMvc.perform(withRole(multipart(HttpMethod.PUT, TourController.TOUR_IMAGES_PATH, id)
+                        .file(new MockMultipartFile("imageCover", "c.jpg", "image/jpeg", new byte[]{1}))
+                        .file(new MockMultipartFile("images", "1.jpg", "image/jpeg", new byte[]{1}))
+                        .file(new MockMultipartFile("images", "2.jpg", "image/jpeg", new byte[]{1})), Role.LEAD_GUIDE))
+                .andExpect(status().isOk());
+
+        verify(tourService).updateImages(id, "cover.jpeg", List.of("1.jpeg", "2.jpeg"));
+    }
+
+    @Test
+    void rejectsTourImageUploadsWithoutFilesOrTooMany() throws Exception {
+        UUID id = UUID.randomUUID();
+        var tooMany = multipart(HttpMethod.PUT, TourController.TOUR_IMAGES_PATH, id);
+        for (int i = 0; i < 4; i++) {
+            tooMany.file(new MockMultipartFile("images", i + ".jpg", "image/jpeg", new byte[]{1}));
+        }
+
+        mockMvc.perform(withRole(multipart(HttpMethod.PUT, TourController.TOUR_IMAGES_PATH, id), Role.ADMIN))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(withRole(tooMany, Role.ADMIN))
+                .andExpect(status().isBadRequest());
+
+        verify(imageService, never()).saveTourImages(any(), any());
+    }
+
+    @Test
+    void listsTopFiveCheapTours() throws Exception {
+        given(tourService.listTours(any(), anyBoolean(), any())).willReturn(new PageImpl<>(List.of(tourDTO(UUID.randomUUID()))));
+
+        mockMvc.perform(get(TourController.TOP_CHEAP_PATH))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("The Forest Hiker"));
+
+        verify(tourService).listTours(new TourFilter(null, null, null, null, null, null, 1.0, null), false,
+                PageRequest.of(0, 5, Sort.by(Sort.Order.desc("averageRating"), Sort.Order.asc("price"))));
+    }
+
+    @Test
+    void returnsStatsWithDefaultAndValidatedMinRating() throws Exception {
+        mockMvc.perform(get(TourController.STATS_PATH)).andExpect(status().isOk());
+        mockMvc.perform(get(TourController.STATS_PATH).param("minRating", "6")).andExpect(status().isBadRequest());
+
+        verify(tourService).getTourStats(4.5);
+    }
+
+    @Test
+    void restrictsMonthlyPlanToStaff() throws Exception {
+        mockMvc.perform(get(TourController.MONTHLY_PLAN_PATH, 2027)).andExpect(status().isUnauthorized());
+        mockMvc.perform(withRole(get(TourController.MONTHLY_PLAN_PATH, 2027), Role.USER)).andExpect(status().isForbidden());
+        mockMvc.perform(withRole(get(TourController.MONTHLY_PLAN_PATH, 2027), Role.GUIDE)).andExpect(status().isOk());
+
+        verify(tourService).getMonthlyPlan(2027);
+    }
+
+    @Test
+    void findsToursWithinRadius() throws Exception {
+        mockMvc.perform(get(TourController.TOURS_WITHIN_PATH, 200, "34.111745,-118.113491", "mi"))
+                .andExpect(status().isOk());
+
+        verify(tourService).findToursWithin(new GeoPoint(34.111745, -118.113491), 200.0, DistanceUnit.MI, false);
+    }
+
+    @Test
+    void returnsDistancesAndRejectsBadInput() throws Exception {
+        mockMvc.perform(get(TourController.DISTANCES_PATH, "34.111745,-118.113491", "km")).andExpect(status().isOk());
+        mockMvc.perform(get(TourController.DISTANCES_PATH, "34.1", "km")).andExpect(status().isBadRequest());
+        mockMvc.perform(get(TourController.DISTANCES_PATH, "95,10", "km")).andExpect(status().isBadRequest());
+        mockMvc.perform(get(TourController.DISTANCES_PATH, "34.1,-118.1", "parsecs")).andExpect(status().isBadRequest());
+
+        verify(tourService).getDistances(new GeoPoint(34.111745, -118.113491), DistanceUnit.KM, false);
     }
 }

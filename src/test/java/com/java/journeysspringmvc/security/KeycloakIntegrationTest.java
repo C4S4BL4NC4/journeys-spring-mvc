@@ -5,7 +5,8 @@
  * imports, points the app's issuer-uri at it, and gets real access tokens from Keycloak's
  * token endpoint through the dev-only journeys-dev-cli client. This exercises the whole chain:
  * signature check against Keycloak's published keys, issuer and audience validation, realm
- * roles -> authorities, and the profile sync into the users table.
+ * roles -> authorities, the profile sync into the users table, and the API's own calls to
+ * Keycloak's admin API (role changes and deactivation through the journeys-backend client).
  *
  * @Transactional rolls back the app's database changes after each test (MockMvc runs requests
  * on the test's thread). Keycloak changes made through its admin API stay in the container,
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
+import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -48,7 +50,9 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -86,6 +90,12 @@ class KeycloakIntegrationTest {
     }
 
     private static String accessToken(String clientId, String email, String password) throws Exception {
+        HttpResponse<String> response = requestToken(clientId, email, password);
+        assertThat(response.statusCode()).as("token request for %s: %s", email, response.body()).isEqualTo(200);
+        return JsonPath.read(response.body(), "$.access_token");
+    }
+
+    private static HttpResponse<String> requestToken(String clientId, String email, String password) throws Exception {
         String form = Map.of("grant_type", "password", "client_id", clientId, "username", email, "password", password)
                 .entrySet().stream()
                 .map(entry -> entry.getKey() + "=" + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
@@ -95,9 +105,7 @@ class KeycloakIntegrationTest {
                 .POST(HttpRequest.BodyPublishers.ofString(form))
                 .build();
         try (HttpClient client = HttpClient.newHttpClient()) {
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            assertThat(response.statusCode()).as("token request for %s: %s", email, response.body()).isEqualTo(200);
-            return JsonPath.read(response.body(), "$.access_token");
+            return client.send(request, HttpResponse.BodyHandlers.ofString());
         }
     }
 
@@ -214,6 +222,52 @@ class KeycloakIntegrationTest {
 
         // Same realm, same user, valid signature, but not minted for "journeys-api"
         String token = accessToken(otherApp.getClientId(), "jane@journeys.dev", PASSWORD);
+        mockMvc.perform(withToken(get(UserController.ME_PATH), token)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void adminChangesRoleThroughKeycloak() throws Exception {
+        UUID keycloakId = registerKeycloakUser("role.change@example.com", "Rory", "Role");
+        mockMvc.perform(withToken(get(UserController.ME_PATH), accessToken("role.change@example.com")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(withToken(patch(UserController.USER_PATH_ID, keycloakId), accessToken("admin@journeys.dev"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\": \"lead-guide\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("LEAD_GUIDE"));
+
+        assertThat(realm().users().get(keycloakId.toString()).roles().realmLevel().listAll())
+                .extracting(RoleRepresentation::getName).contains("LEAD_GUIDE");
+        // The next token Keycloak issues carries the new role
+        mockMvc.perform(withToken(post(TourController.TOUR_PATH), accessToken("role.change@example.com"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void adminDeactivationDisablesAccountAndRejectsItsTokens() throws Exception {
+        UUID keycloakId = registerKeycloakUser("deactivated@example.com", "Dee", "Activated");
+        String token = accessToken("deactivated@example.com");
+        mockMvc.perform(withToken(get(UserController.ME_PATH), token)).andExpect(status().isOk());
+
+        mockMvc.perform(withToken(delete(UserController.USER_PATH_ID, keycloakId), accessToken("admin@journeys.dev")))
+                .andExpect(status().isNoContent());
+
+        assertThat(realm().users().get(keycloakId.toString()).toRepresentation().isEnabled()).isFalse();
+        // The token is still cryptographically valid for a few minutes, but the API turns it away
+        mockMvc.perform(withToken(get(UserController.ME_PATH), token)).andExpect(status().isUnauthorized());
+        assertThat(requestToken("journeys-dev-cli", "deactivated@example.com", PASSWORD).statusCode()).isEqualTo(400);
+    }
+
+    @Test
+    void deleteMeDeactivatesOwnAccount() throws Exception {
+        UUID keycloakId = registerKeycloakUser("leaving@example.com", "Lee", "Leaving");
+        String token = accessToken("leaving@example.com");
+        mockMvc.perform(withToken(get(UserController.ME_PATH), token)).andExpect(status().isOk());
+
+        mockMvc.perform(withToken(delete(UserController.ME_PATH), token)).andExpect(status().isNoContent());
+
+        assertThat(realm().users().get(keycloakId.toString()).toRepresentation().isEnabled()).isFalse();
         mockMvc.perform(withToken(get(UserController.ME_PATH), token)).andExpect(status().isUnauthorized());
     }
 }

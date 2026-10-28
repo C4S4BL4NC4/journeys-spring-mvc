@@ -8,12 +8,21 @@
  *     range, duration/rating/group size combined; secret tours hidden unless included
  *   - sorting by several fields, rejecting fields outside the allow-list, and paging
  *   - a page of tours loading its lazy collections in batches rather than per tour (N+1 guard)
- *   - get, create (slug generation, given slug, guide resolution and validation),
+ *   - the Natours extras: stats per difficulty, the monthly plan, tours within a radius and
+ *     distances from a point (secret tours excluded unless included)
+ *   - get, create (slug generation, given slug, guide resolution and validation, including
+ *     rejecting deactivated guides), image updates,
  *     update (fields replaced, slug and ratings kept) and delete
  */
 package com.java.journeysspringmvc.service;
 
+import com.java.journeysspringmvc.dto.MonthlyPlanDTO;
 import com.java.journeysspringmvc.dto.TourDTO;
+import com.java.journeysspringmvc.dto.TourDistanceDTO;
+import com.java.journeysspringmvc.dto.TourStatsDTO;
+import com.java.journeysspringmvc.entity.Location;
+import com.java.journeysspringmvc.geo.DistanceUnit;
+import com.java.journeysspringmvc.geo.GeoPoint;
 import com.java.journeysspringmvc.dto.TourFilter;
 import com.java.journeysspringmvc.entity.Difficulty;
 import com.java.journeysspringmvc.entity.Role;
@@ -41,6 +50,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -294,5 +305,86 @@ class TourServiceImplTest {
         assertThat(tourService.deleteTour(id)).isTrue();
         assertThat(tourRepository.existsById(id)).isFalse();
         assertThat(tourService.deleteTour(id)).isFalse();
+    }
+
+    private Tour existingTourStartingAt(String name, double latitude, double longitude, LocalDateTime... startDates) {
+        Tour tour = existingTour(name);
+        tour.setStartLocation(Location.builder().latitude(latitude).longitude(longitude).build());
+        tour.getStartDates().addAll(List.of(startDates));
+        return tourRepository.saveAndFlush(tour);
+    }
+
+    @Test
+    void aggregatesStatsPerDifficulty() {
+        // setUp ratings: Forest 4.7 (EASY), Sea 4.8 (MEDIUM), Snow 4.5 (DIFFICULT), City 4.6 (EASY)
+        List<TourStatsDTO> stats = tourService.getTourStats(4.6);
+
+        assertThat(stats).extracting(TourStatsDTO::difficulty).containsExactly(Difficulty.MEDIUM, Difficulty.EASY);
+        TourStatsDTO easy = stats.get(1);
+        assertThat(easy.numTours()).isEqualTo(2);
+        assertThat(easy.avgPrice()).isEqualTo(797.0);
+        assertThat(easy.minPrice()).isEqualByComparingTo("397.00");
+        assertThat(easy.maxPrice()).isEqualByComparingTo("1197.00");
+    }
+
+    @Test
+    void buildsMonthlyPlanBusiestMonthFirst() {
+        existingTourStartingAt("The Forest Hiker", 51.2, -115.6, LocalDateTime.of(2031, 7, 1, 9, 0), LocalDateTime.of(2032, 7, 1, 9, 0));
+        existingTourStartingAt("The Sea Explorer", 25.8, -80.2, LocalDateTime.of(2031, 7, 20, 9, 0), LocalDateTime.of(2031, 3, 2, 9, 0));
+
+        List<MonthlyPlanDTO> plan = tourService.getMonthlyPlan(2031);
+
+        assertThat(plan).extracting(MonthlyPlanDTO::month).containsExactly(7, 3);
+        assertThat(plan.getFirst().numTourStarts()).isEqualTo(2);
+        assertThat(plan.getFirst().tours()).containsExactlyInAnyOrder("The Forest Hiker", "The Sea Explorer");
+    }
+
+    @Test
+    void findsToursWithinRadiusAndMeasuresDistances() {
+        existingTourStartingAt("The City Wanderer", 40.75894, -73.985141);   // New York
+        existingTourStartingAt("The Sea Explorer", 25.774772, -80.185942);   // Miami
+        GeoPoint philadelphia = new GeoPoint(39.9526, -75.1652);
+
+        assertThat(tourService.findToursWithin(philadelphia, 100, DistanceUnit.MI, false))
+                .extracting(TourDTO::name).containsExactly("The City Wanderer");
+
+        List<TourDistanceDTO> distances = tourService.getDistances(philadelphia, DistanceUnit.KM, false);
+        assertThat(distances).extracting(TourDistanceDTO::name).containsExactly("The City Wanderer", "The Sea Explorer");
+        // Philadelphia - New York is about 130 km
+        assertThat(distances.getFirst().distance()).isBetween(125.0, 135.0);
+    }
+
+    @Test
+    void leavesSecretToursOutOfGeoQueriesUnlessIncluded() {
+        Tour secret = existingTourStartingAt("The City Wanderer", 40.75894, -73.985141);
+        secret.setSecretTour(true);
+        tourRepository.saveAndFlush(secret);
+        GeoPoint newYork = new GeoPoint(40.75, -73.98);
+
+        assertThat(tourService.findToursWithin(newYork, 10, DistanceUnit.KM, false)).isEmpty();
+        assertThat(tourService.findToursWithin(newYork, 10, DistanceUnit.KM, true)).hasSize(1);
+    }
+
+    @Test
+    void rejectsDeactivatedGuides() {
+        User guide = user("gone.guide@example.com", Role.GUIDE);
+        guide.setDeactivatedAt(Instant.now());
+        userRepository.saveAndFlush(guide);
+
+        assertThatThrownBy(() -> tourService.saveNewTour(dto("Ghost Guided", null, Set.of(guide.getId()))))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void updatesImagesKeepingWhatIsNotSent() {
+        UUID id = existingTour("The Forest Hiker").getId();
+
+        TourDTO coverOnly = tourService.updateImages(id, "new-cover.jpeg", List.of()).orElseThrow();
+        assertThat(coverOnly.imageCover()).isEqualTo("new-cover.jpeg");
+
+        TourDTO imagesOnly = tourService.updateImages(id, null, List.of("1.jpeg", "2.jpeg")).orElseThrow();
+        assertThat(imagesOnly.imageCover()).isEqualTo("new-cover.jpeg");
+        assertThat(imagesOnly.images()).containsExactly("1.jpeg", "2.jpeg");
+        assertThat(tourService.updateImages(UUID.randomUUID(), "x.jpeg", List.of())).isEmpty();
     }
 }
