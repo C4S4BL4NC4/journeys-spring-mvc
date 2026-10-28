@@ -2,7 +2,8 @@
  * REST endpoints for user profiles under /api/v1/users.
  *
  *   GET /api/v1/users           ADMIN; list users. Optional query params:
- *                               name, role, sort (e.g. "-createdAt"), page (1-based) and size
+ *                               filters  name, role (see UserFilter)
+ *                               paging   page (0-based), size, sort=field[,asc|desc]; newest first by default
  *   GET /api/v1/users/{userId}  ADMIN; one user by their Keycloak id, or 404
  *   GET /api/v1/users/me        any logged-in user; their own profile
  *
@@ -13,16 +14,19 @@
 package com.java.journeysspringmvc.controller;
 
 import com.java.journeysspringmvc.dto.UserDTO;
-import com.java.journeysspringmvc.entity.Role;
+import com.java.journeysspringmvc.dto.UserFilter;
 import com.java.journeysspringmvc.exception.NotFoundException;
 import com.java.journeysspringmvc.service.UserService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.web.PagedModel;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.SortDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -38,12 +42,9 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping(USER_PATH)
-    public PagedModel<UserDTO> listUsers(@RequestParam(required = false) String name,
-                                         @RequestParam(required = false) Role role,
-                                         @RequestParam(required = false) String sort,
-                                         @RequestParam(required = false) Integer page,
-                                         @RequestParam(required = false) Integer size) {
-        return new PagedModel<>(userService.listUsers(name, role, sort, page, size));
+    public Page<UserDTO> listUsers(@ParameterObject UserFilter filter,
+                                   @ParameterObject @SortDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return userService.listUsers(filter, pageable);
     }
 
     @GetMapping(USER_PATH_ID)

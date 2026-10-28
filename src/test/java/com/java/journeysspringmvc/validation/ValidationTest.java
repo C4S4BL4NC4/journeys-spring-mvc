@@ -4,14 +4,14 @@
  *
  * Covers a valid tour DTO passing, required
  * tour fields and slug format, discount having to be below price, coordinate ranges, the
- * computed durationWeeks, and the Tour entity rejecting invalid state on its own.
+ * computed durationWeeks. Entities aren't validated separately: the DTOs are the API boundary
+ * and database constraints back them up.
  */
 package com.java.journeysspringmvc.validation;
 
 import com.java.journeysspringmvc.dto.LocationDTO;
 import com.java.journeysspringmvc.dto.TourDTO;
 import com.java.journeysspringmvc.entity.Difficulty;
-import com.java.journeysspringmvc.entity.Tour;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -80,23 +80,5 @@ class ValidationTest {
                 List.of(new LocationDTO(0.0, -95.0, null, null, 0)));
         assertThat(violatedProperties(tour)).containsExactlyInAnyOrder(
                 "startLocation.longitude", "locations[0].latitude", "locations[0].day");
-    }
-
-    @Test
-    void tourEntityRejectsInvalidState() {
-        Tour tour = Tour.builder()
-                .name("Tour")
-                .slug("tour")
-                .duration(5)
-                .maxGroupSize(0)
-                .difficulty(Difficulty.EASY)
-                .averageRating(6.0)
-                .price(new BigDecimal("100.00"))
-                .discount(new BigDecimal("100.00"))
-                .summary("Summary")
-                .imageCover("cover.jpg")
-                .build();
-        assertThat(violatedProperties(tour))
-                .containsExactlyInAnyOrder("maxGroupSize", "averageRating", "discountBelowPrice");
     }
 }

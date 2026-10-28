@@ -1,7 +1,8 @@
 /*
  * User profile logic: the implementation behind UserService.
  *
- *   listUsers    filtered by name/role, sorted and paged via PageRequests
+ *   listUsers    filtered by name/role (via Specs), paged and sorted by the client's Pageable
+ *                after checking its sort fields against SORTABLE_FIELDS
  *   getUserById  one profile by its Keycloak user id
  *   syncUser     "just-in-time provisioning": creates the local profile the first time a
  *                Keycloak user calls the API, and afterwards updates name, email and role
@@ -11,16 +12,16 @@
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.UserDTO;
+import com.java.journeysspringmvc.dto.UserFilter;
 import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.entity.User;
 import com.java.journeysspringmvc.mapper.UserMapper;
 import com.java.journeysspringmvc.repository.UserRepository;
-import com.java.journeysspringmvc.util.PageRequests;
+import com.java.journeysspringmvc.util.Pageables;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,14 +32,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.java.journeysspringmvc.repository.UserSpecifications.*;
+import static com.java.journeysspringmvc.repository.Specs.containsIgnoreCase;
+import static com.java.journeysspringmvc.repository.Specs.equalTo;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    private final static Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("createdAt"));
     private final static Set<String> SORTABLE_FIELDS = Set.of("name", "email", "role", "createdAt");
     private final static int MAX_NAME_LENGTH = 50;
 
@@ -47,14 +48,13 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<UserDTO> listUsers(String name, Role role, String sortBy, Integer pageNumber, Integer pageSize) {
-        PageRequest pageRequest = PageRequests.of(sortBy, pageNumber, pageSize, SORTABLE_FIELDS, DEFAULT_SORT);
-
+    public Page<UserDTO> listUsers(UserFilter filter, Pageable pageable) {
         Specification<User> spec = Specification.allOf(
-                nameContains(name),
-                hasRole(role));
+                containsIgnoreCase("name", filter.name()),
+                equalTo("role", filter.role()));
 
-        return userRepository.findAll(spec, pageRequest).map(userMapper::userToUserDTO);
+        return userRepository.findAll(spec, Pageables.requireSortable(pageable, SORTABLE_FIELDS))
+                .map(userMapper::userToUserDTO);
     }
 
     @Override

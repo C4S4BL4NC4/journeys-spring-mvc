@@ -1,35 +1,46 @@
 /*
  * REST endpoints for tours under /api/v1/tours.
  *
- *   GET    /api/v1/tours            list tours; optional query params:
- *                                   name, difficulty, minPrice, maxPrice, minDuration, maxDuration,
- *                                   minRating, maxGroupSize, sort (e.g. "-price,averageRating"),
- *                                   page (1-based) and size
+ *   GET    /api/v1/tours            list tours. Optional query params:
+ *                                  filters  name, difficulty, minPrice, maxPrice, minDuration,
+ *                                           maxDuration, minRating, maxGroupSize (see TourFilter)
+ *                                  paging   page (0-based), size, sort=field[,asc|desc] (repeatable),
+ *                                           e.g. ?sort=price,desc&sort=averageRating; newest first by default
  *   GET    /api/v1/tours/{tourId}   one tour, or 404
  *   POST   /api/v1/tours            create; 201 with a Location header pointing at the new tour
  *   PUT    /api/v1/tours/{tourId}   replace a tour's editable fields, or 404
  *   DELETE /api/v1/tours/{tourId}   delete; 204, or 404
  *
+ * Secret tours are only listed or returned for TOUR_MANAGERS (ADMIN, LEAD_GUIDE); for anyone
+ * else, including anonymous callers, they don't exist. Writes are restricted to the same
+ * roles by SecurityConfig.
+ *
  * The controller only translates HTTP to service calls: request bodies are validated with
  * @Validated (400 on failure), the work happens in TourService, and missing tours become a
  * NotFoundException that GlobalExceptionHandler turns into a 404 response.
- * List results are wrapped in PagedModel, giving JSON shaped like {"content": [...], "page": {...}}.
+ * Pages serialize as {"content": [...], "page": {size, number, totalElements, totalPages}}.
  */
 package com.java.journeysspringmvc.controller;
 
 import com.java.journeysspringmvc.dto.TourDTO;
-import com.java.journeysspringmvc.entity.Difficulty;
+import com.java.journeysspringmvc.dto.TourFilter;
+import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.exception.NotFoundException;
 import com.java.journeysspringmvc.service.TourService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.web.PagedModel;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.SortDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 
 @RestController
@@ -42,24 +53,16 @@ public class TourController {
     private final TourService tourService;
 
     @GetMapping(TOUR_PATH)
-    public PagedModel<TourDTO> listTours(@RequestParam(required = false) String name,
-                                         @RequestParam(required = false) Difficulty difficulty,
-                                         @RequestParam(required = false) BigDecimal minPrice,
-                                         @RequestParam(required = false) BigDecimal maxPrice,
-                                         @RequestParam(required = false) Integer minDuration,
-                                         @RequestParam(required = false) Integer maxDuration,
-                                         @RequestParam(required = false) Double minRating,
-                                         @RequestParam(required = false) Integer maxGroupSize,
-                                         @RequestParam(required = false) String sort,
-                                         @RequestParam(required = false) Integer page,
-                                         @RequestParam(required = false) Integer size) {
-        return new PagedModel<>(tourService.listTours(name, difficulty, minPrice, maxPrice,
-                minDuration, maxDuration, minRating, maxGroupSize, sort, page, size));
+    public Page<TourDTO> listTours(@ParameterObject TourFilter filter,
+                                   @ParameterObject @SortDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+                                   Authentication authentication) {
+        return tourService.listTours(filter, canSeeSecretTours(authentication), pageable);
     }
 
     @GetMapping(TOUR_PATH_ID)
-    public TourDTO getTourById(@PathVariable UUID tourId) {
-        return tourService.getTourById(tourId).orElseThrow(() -> tourNotFound(tourId));
+    public TourDTO getTourById(@PathVariable UUID tourId, Authentication authentication) {
+        return tourService.getTourById(tourId, canSeeSecretTours(authentication))
+                .orElseThrow(() -> tourNotFound(tourId));
     }
 
     @PostMapping(TOUR_PATH)
@@ -80,6 +83,13 @@ public class TourController {
         if (!tourService.deleteTour(tourId)) {
             throw tourNotFound(tourId);
         }
+    }
+
+    // Anonymous callers get a null Authentication
+    private static boolean canSeeSecretTours(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(authority -> Role.TOUR_MANAGERS.stream().map(Role::authority).anyMatch(authority::equals));
     }
 
     private static NotFoundException tourNotFound(UUID tourId) {

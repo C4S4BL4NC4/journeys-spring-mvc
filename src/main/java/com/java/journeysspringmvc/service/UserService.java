@@ -8,14 +8,16 @@
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.UserDTO;
+import com.java.journeysspringmvc.dto.UserFilter;
 import com.java.journeysspringmvc.entity.Role;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.Optional;
 import java.util.UUID;
 
 public interface UserService {
-    Page<UserDTO> listUsers(String name, Role role, String sortBy, Integer pageNumber, Integer pageSize);
+    Page<UserDTO> listUsers(UserFilter filter, Pageable pageable);
 
     Optional<UserDTO> getUserById(UUID id);
 

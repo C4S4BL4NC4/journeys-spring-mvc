@@ -5,7 +5,9 @@
  * the imported SecurityConfig); TourService is replaced with a Mockito mock, so no database
  * is involved. Requests carry mock JWTs with a chosen role instead of real tokens.
  * Requests go through MockMvc and the tests check:
- *   - query parameters are passed to the service correctly, and the paged JSON shape
+ *   - filters bind into a TourFilter and paging/sorting into a Pageable (with the default
+ *     newest-first sort and the max page size applied), and the paged JSON shape
+ *   - secret tours are requested only for tour managers (LEAD_GUIDE/ADMIN tokens)
  *   - status codes: 200, 201 + Location header, 204, 400 (invalid body, malformed id,
  *     business rule), 404 (unknown tour) and 409 (duplicate slug)
  *   - reading tours is public; writing without a token gives 401, and with a token whose
@@ -15,8 +17,10 @@ package com.java.journeysspringmvc.controller;
 
 import com.java.journeysspringmvc.config.SecurityConfig;
 import com.java.journeysspringmvc.dto.TourDTO;
+import com.java.journeysspringmvc.dto.TourFilter;
 import com.java.journeysspringmvc.entity.Difficulty;
 import com.java.journeysspringmvc.entity.Role;
+import com.java.journeysspringmvc.exception.BadRequestException;
 import com.java.journeysspringmvc.service.TourService;
 import com.java.journeysspringmvc.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -24,7 +28,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -37,6 +44,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -89,30 +97,57 @@ class TourControllerTest {
 
     @Test
     void listsToursPubliclyWithFiltersSortAndPaging() throws Exception {
-        given(tourService.listTours(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .willReturn(new PageImpl<>(List.of(tourDTO(UUID.randomUUID()))));
+        given(tourService.listTours(any(), anyBoolean(), any()))
+                .willReturn(new PageImpl<>(List.of(tourDTO(UUID.randomUUID())), PageRequest.of(2, 5), 11));
 
         mockMvc.perform(get(TourController.TOUR_PATH)
                         .param("name", "forest")
                         .param("difficulty", "EASY")
                         .param("minPrice", "100")
                         .param("maxGroupSize", "30")
-                        .param("sort", "-price")
+                        .param("sort", "price,desc")
+                        .param("sort", "averageRating")
                         .param("page", "2")
                         .param("size", "5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].name").value("The Forest Hiker"))
                 .andExpect(jsonPath("$.content[0].durationWeeks").exists())
-                .andExpect(jsonPath("$.page.totalElements").value(1));
+                .andExpect(jsonPath("$.page.number").value(2))
+                .andExpect(jsonPath("$.page.totalElements").value(11));
 
-        verify(tourService).listTours("forest", Difficulty.EASY, new BigDecimal("100"), null,
-                null, null, null, 30, "-price", 2, 5);
+        verify(tourService).listTours(
+                new TourFilter("forest", Difficulty.EASY, new BigDecimal("100"), null, null, null, null, 30),
+                false,
+                PageRequest.of(2, 5, Sort.by(Sort.Order.desc("price"), Sort.Order.asc("averageRating"))));
+    }
+
+    @Test
+    void appliesDefaultPagingAndCapsPageSize() throws Exception {
+        given(tourService.listTours(any(), anyBoolean(), any())).willReturn(Page.empty());
+
+        mockMvc.perform(get(TourController.TOUR_PATH)).andExpect(status().isOk());
+        mockMvc.perform(get(TourController.TOUR_PATH).param("size", "5000")).andExpect(status().isOk());
+
+        verify(tourService).listTours(any(), eq(false), eq(PageRequest.of(0, 25, Sort.by(Sort.Order.desc("createdAt")))));
+        verify(tourService).listTours(any(), eq(false), eq(PageRequest.of(0, 100, Sort.by(Sort.Order.desc("createdAt")))));
+    }
+
+    @Test
+    void showsSecretToursOnlyToTourManagers() throws Exception {
+        given(tourService.listTours(any(), anyBoolean(), any())).willReturn(Page.empty());
+
+        mockMvc.perform(asRole(get(TourController.TOUR_PATH), Role.LEAD_GUIDE)).andExpect(status().isOk());
+        mockMvc.perform(asRole(get(TourController.TOUR_PATH), Role.GUIDE)).andExpect(status().isOk());
+
+        verify(tourService).listTours(any(), eq(true), any());
+        // GUIDE can be assigned to tours but doesn't manage them
+        verify(tourService).listTours(any(), eq(false), any());
     }
 
     @Test
     void getsTourById() throws Exception {
         UUID id = UUID.randomUUID();
-        given(tourService.getTourById(id)).willReturn(Optional.of(tourDTO(id)));
+        given(tourService.getTourById(id, false)).willReturn(Optional.of(tourDTO(id)));
 
         mockMvc.perform(get(TourController.TOUR_PATH_ID, id))
                 .andExpect(status().isOk())
@@ -123,7 +158,7 @@ class TourControllerTest {
     @Test
     void returnsNotFoundForUnknownTour() throws Exception {
         UUID id = UUID.randomUUID();
-        given(tourService.getTourById(id)).willReturn(Optional.empty());
+        given(tourService.getTourById(id, false)).willReturn(Optional.empty());
 
         mockMvc.perform(get(TourController.TOUR_PATH_ID, id))
                 .andExpect(status().isNotFound())
@@ -167,7 +202,7 @@ class TourControllerTest {
 
     @Test
     void mapsBusinessRuleViolationsToBadRequest() throws Exception {
-        given(tourService.saveNewTour(any())).willThrow(new IllegalArgumentException("guideIds must all reference existing guides or lead guides"));
+        given(tourService.saveNewTour(any())).willThrow(new BadRequestException("guideIds must all reference existing guides or lead guides"));
 
         mockMvc.perform(asAdmin(post(TourController.TOUR_PATH)).content(VALID_TOUR))
                 .andExpect(status().isBadRequest())

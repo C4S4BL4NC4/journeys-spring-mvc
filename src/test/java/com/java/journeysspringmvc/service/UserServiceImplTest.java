@@ -9,6 +9,7 @@
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.UserDTO;
+import com.java.journeysspringmvc.dto.UserFilter;
 import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.entity.User;
 import com.java.journeysspringmvc.mapper.UserMapper;
@@ -21,6 +22,8 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.util.UUID;
 
@@ -109,10 +112,10 @@ class UserServiceImplTest {
         saveUser(TEST_NAME + " Guide", "z.guide@example.com", Role.GUIDE);
         saveUser(TEST_NAME + " User", "z.user@example.com", Role.USER);
 
-        assertThat(userService.listUsers(TEST_NAME.toLowerCase(), null, "name", null, null))
+        assertThat(userService.listUsers(new UserFilter(TEST_NAME.toLowerCase(), null), PageRequest.of(0, 25, Sort.by("name"))))
                 .extracting(UserDTO::name)
                 .containsExactly(TEST_NAME + " Guide", TEST_NAME + " User");
-        assertThat(userService.listUsers(TEST_NAME, Role.GUIDE, null, null, null))
+        assertThat(userService.listUsers(new UserFilter(TEST_NAME, Role.GUIDE), PageRequest.of(0, 25)))
                 .extracting(UserDTO::email)
                 .containsExactly("z.guide@example.com");
     }

@@ -10,6 +10,7 @@ package com.java.journeysspringmvc.controller;
 
 import com.java.journeysspringmvc.config.SecurityConfig;
 import com.java.journeysspringmvc.dto.UserDTO;
+import com.java.journeysspringmvc.dto.UserFilter;
 import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -69,13 +72,13 @@ class UserControllerTest {
         mockMvc.perform(asRole(get(UserController.USER_PATH_ID, UUID.randomUUID()), Role.USER))
                 .andExpect(status().isForbidden());
 
-        verify(userService, never()).listUsers(any(), any(), any(), any(), any());
+        verify(userService, never()).listUsers(any(), any());
         verify(userService, never()).getUserById(any());
     }
 
     @Test
     void listsUsersWithFiltersSortAndPaging() throws Exception {
-        given(userService.listUsers(any(), any(), any(), any(), any()))
+        given(userService.listUsers(any(), any()))
                 .willReturn(new PageImpl<>(List.of(userDTO(UUID.randomUUID(), Role.GUIDE))));
 
         mockMvc.perform(asRole(get(UserController.USER_PATH), Role.ADMIN)
@@ -87,7 +90,7 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].email").value("jane@example.com"));
 
-        verify(userService).listUsers("jane", Role.GUIDE, "name", 1, 10);
+        verify(userService).listUsers(new UserFilter("jane", Role.GUIDE), PageRequest.of(1, 10, Sort.by("name")));
     }
 
     @Test

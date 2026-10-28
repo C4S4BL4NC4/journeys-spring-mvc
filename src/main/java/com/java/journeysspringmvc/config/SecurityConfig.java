@@ -13,16 +13,18 @@
  *   - CurrentUserSyncFilter mirrors the caller's profile into the users table
  *
  * Access rules (first match wins):
- *   Swagger UI/docs, GET tours            public
+ *   Swagger UI/docs, GET tours            public (secret tours only show up for tour managers)
  *   GET /api/v1/users/me                  any logged-in user
- *   create/update/delete tours            ADMIN or LEAD_GUIDE
+ *   create/update/delete tours            Role.TOUR_MANAGERS (ADMIN, LEAD_GUIDE)
  *   other /api/v1/users endpoints         ADMIN
  *   anything else                         any logged-in user
  * Missing or invalid tokens get 401; a valid token without the required role gets 403.
  */
 package com.java.journeysspringmvc.config;
 
+import com.java.journeysspringmvc.controller.TourController;
 import com.java.journeysspringmvc.controller.UserController;
+import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.security.CurrentUserSyncFilter;
 import com.java.journeysspringmvc.security.KeycloakRealmRoleConverter;
 import com.java.journeysspringmvc.service.UserService;
@@ -36,18 +38,23 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
+import java.util.Set;
+
 @Configuration
 public class SecurityConfig {
+
+    private static final String[] TOURS = {TourController.TOUR_PATH, TourController.TOUR_PATH + "/**"};
+    private static final String[] USERS = {UserController.USER_PATH, UserController.USER_PATH + "/**"};
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, UserService userService) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/tours", "/api/v1/tours/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, TOURS).permitAll()
                         .requestMatchers(HttpMethod.GET, UserController.ME_PATH).authenticated()
-                        .requestMatchers("/api/v1/tours", "/api/v1/tours/**").hasAnyRole("ADMIN", "LEAD_GUIDE")
-                        .requestMatchers("/api/v1/users", "/api/v1/users/**").hasRole("ADMIN")
+                        .requestMatchers(TOURS).hasAnyAuthority(authorities(Role.TOUR_MANAGERS))
+                        .requestMatchers(USERS).hasAuthority(Role.ADMIN.authority())
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
@@ -57,6 +64,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         return http.build();
+    }
+
+    private static String[] authorities(Set<Role> roles) {
+        return roles.stream().map(Role::authority).toArray(String[]::new);
     }
 
     // The authentication's name stays the token's "sub" claim, i.e. the Keycloak user id

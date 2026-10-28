@@ -8,16 +8,18 @@
  *   2. loadTours() creates sample Natours tours and assigns the guides to them.
  *      Users are loaded first because tours need guides to reference.
  * Each step skips itself if its table already has rows, so restarting against a
- * persistent database never duplicates data. Finally greeter() prints the Swagger UI URL.
+ * persistent database never duplicates data. It's for development only, so it is skipped
+ * when the "prod" profile is active.
  */
 package com.java.journeysspringmvc.bootstrap;
 
 import com.java.journeysspringmvc.entity.*;
 import com.java.journeysspringmvc.repository.TourRepository;
 import com.java.journeysspringmvc.repository.UserRepository;
-import com.java.journeysspringmvc.util.FormatUrl;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +27,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
+@Slf4j
 @Component
+@Profile("!prod")
 @RequiredArgsConstructor
 public class BootstrapData implements CommandLineRunner {
 
@@ -45,7 +49,7 @@ public class BootstrapData implements CommandLineRunner {
         // Users first, so tours can be assigned guides
         loadUsers();
         loadTours();
-        greeter();
+        log.info("Sample data ready; API docs at http://localhost:8080/swagger-ui.html");
     }
 
     private void loadUsers() {
@@ -67,7 +71,7 @@ public class BootstrapData implements CommandLineRunner {
             return;
         }
 
-        Set<User> guides = new HashSet<>(userRepository.findAllByRoleIn(List.of(Role.LEAD_GUIDE, Role.GUIDE)));
+        Set<User> guides = new HashSet<>(userRepository.findAllByRoleIn(Role.GUIDES));
         int year = LocalDateTime.now().getYear() + 1;
 
         tourRepository.saveAll(List.of(
@@ -174,12 +178,5 @@ public class BootstrapData implements CommandLineRunner {
                 .email(email)
                 .role(role)
                 .build();
-    }
-
-    private void greeter() {
-        System.out.println("=".repeat(50));
-        System.out.println("Hello World!");
-        System.out.println(FormatUrl.of("http://localhost:8080/swagger-ui.html"));
-        System.out.println("=".repeat(50));
     }
 }

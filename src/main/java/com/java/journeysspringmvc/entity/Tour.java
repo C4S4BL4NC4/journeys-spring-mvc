@@ -8,14 +8,13 @@
  *   - guides: a many-to-many link to User through the tour_guides join table
  *   - createdAt/lastModifiedAt: filled in automatically by Hibernate
  *   - version: optimistic locking, so two concurrent edits can't silently overwrite each other
- * Validation annotations repeat the database constraints so invalid state fails early,
- * and secretTour marks tours meant to be hidden from public listings.
+ * Input is validated on TourDTO at the API boundary; the @Column settings here mirror the
+ * database constraints (Flyway migrations), which are the last line of defence.
+ * secretTour marks tours that only tour managers can see.
  */
 package com.java.journeysspringmvc.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -41,66 +40,31 @@ public class Tour {
     @Column(length = 36, columnDefinition = "varchar", updatable = false, nullable = false)
     @JdbcTypeCode(SqlTypes.CHAR)
     private UUID id;
-
-    @NotBlank
-    @Size(max = 50)
     @Column(length = 50, nullable = false)
     private String name;
-
-    @NotBlank
-    @Size(max = 60)
-    @Pattern(regexp = "^[a-z0-9]+(?:-[a-z0-9]+)*$", message = "must be lowercase words separated by hyphens")
     @Column(length = 60, nullable = false, unique = true)
     private String slug;
 
     // Length of the tour in days
-    @NotNull
-    @Positive
     @Column(nullable = false)
     private Integer duration;
-
-    @NotNull
-    @Positive
     @Column(nullable = false)
     private Integer maxGroupSize;
-
-    @NotNull
     @Enumerated(EnumType.STRING)
     @Column(length = 20, nullable = false)
     private Difficulty difficulty;
-
-    @DecimalMin("1.0")
-    @DecimalMax("5.0")
     private Double averageRating;
-
-    @NotNull
-    @PositiveOrZero
     @Builder.Default
     @Column(nullable = false)
     private Integer ratingQuantity = 0;
-
-    @NotNull
-    @Positive
-    @Digits(integer = 8, fraction = 2)
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
-
-    @PositiveOrZero
-    @Digits(integer = 8, fraction = 2)
     @Column(precision = 10, scale = 2)
     private BigDecimal discount;
-
-    @NotBlank
-    @Size(max = 255)
     @Column(nullable = false)
     private String summary;
-
-    @Size(max = 2000)
     @Column(length = 2000)
     private String description;
-
-    @NotBlank
-    @Size(max = 255)
     @Column(nullable = false)
     private String imageCover;
 
@@ -109,22 +73,19 @@ public class Tour {
     @CollectionTable(name = "tour_images", joinColumns = @JoinColumn(name = "tour_id"))
     @OrderColumn(name = "image_order")
     @Column(name = "image", nullable = false)
-    private List<@NotBlank @Size(max = 255) String> images = new ArrayList<>();
+    private List<String> images = new ArrayList<>();
 
     @Builder.Default
     @ElementCollection
     @CollectionTable(name = "tour_start_dates", joinColumns = @JoinColumn(name = "tour_id"))
     @OrderBy
     @Column(name = "start_date", nullable = false)
-    private Set<@NotNull LocalDateTime> startDates = new LinkedHashSet<>();
+    private Set<LocalDateTime> startDates = new LinkedHashSet<>();
 
     // Hidden from public listings, like the secret tours in Natours
-    @NotNull
     @Builder.Default
     @Column(nullable = false)
     private Boolean secretTour = false;
-
-    @Valid
     @Embedded
     @AttributeOverride(name = "longitude", column = @Column(name = "start_location_longitude"))
     @AttributeOverride(name = "latitude", column = @Column(name = "start_location_latitude"))
@@ -132,8 +93,6 @@ public class Tour {
     @AttributeOverride(name = "description", column = @Column(name = "start_location_description"))
     @AttributeOverride(name = "day", column = @Column(name = "start_location_day_number"))
     private Location startLocation;
-
-    @Valid
     @Builder.Default
     @ElementCollection
     @CollectionTable(name = "tour_locations", joinColumns = @JoinColumn(name = "tour_id"))
@@ -158,9 +117,4 @@ public class Tour {
 
     @Version
     private Integer version;
-
-    @AssertTrue(message = "discount must be lower than price")
-    private boolean isDiscountBelowPrice() {
-        return discount == null || price == null || discount.compareTo(price) < 0;
-    }
 }

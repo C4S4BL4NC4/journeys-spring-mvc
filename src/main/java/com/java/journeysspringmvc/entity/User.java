@@ -14,10 +14,6 @@
 package com.java.journeysspringmvc.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -40,28 +36,16 @@ public class User {
 
     // Assigned from the Keycloak user id rather than generated
     @Id
-    @NotNull
     @Column(length = 36, columnDefinition = "varchar", updatable = false, nullable = false)
     @JdbcTypeCode(SqlTypes.CHAR)
     private UUID id;
-
-    @NotBlank
-    @Size(max = 50)
     @Column(length = 50, nullable = false)
     private String name;
-
-    @NotBlank
-    @Email
-    @Size(max = 254)
     @Column(length = 254, nullable = false, unique = true)
     private String email;
-
-    @Size(max = 255)
     @Builder.Default
     @Column(nullable = false)
     private String photo = DEFAULT_PHOTO;
-
-    @NotNull
     @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(length = 20, nullable = false)

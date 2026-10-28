@@ -1,57 +1,51 @@
 /*
  * Business logic for tours: the implementation behind TourService.
  *
- *   listTours    combines the optional filters into one Specification query, with sorting
- *                and paging handled by PageRequests
- *   getTourById  looks one tour up
+ *   listTours    combines the optional TourFilter fields into one Specification query (via
+ *                Specs), hides secret tours unless includeSecret, and pages/sorts with the
+ *                client's Pageable after checking its sort fields against SORTABLE_FIELDS
+ *   getTourById  looks one tour up, again hiding secret tours unless includeSecret
  *   saveNewTour  generates the slug from the name when none is given (like Natours' pre-save
  *                hook, e.g. "The Désert Crossing!" -> "the-desert-crossing") and resolves guideIds
  *   updateTour   full replace of the editable fields; keeps the existing slug if none is sent,
  *                so renaming a tour doesn't break its URL
  *   deleteTour   deletes if it exists
  * resolveGuides() checks every guideId belongs to an existing GUIDE or LEAD_GUIDE user and
- * throws IllegalArgumentException (-> 400) otherwise. Writes use saveAndFlush so constraint
+ * throws BadRequestException (-> 400) otherwise. Writes use saveAndFlush so constraint
  * errors like a duplicate slug surface here (-> 409) instead of at transaction commit.
  */
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.TourDTO;
-import com.java.journeysspringmvc.entity.Difficulty;
+import com.java.journeysspringmvc.dto.TourFilter;
 import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.entity.Tour;
 import com.java.journeysspringmvc.entity.User;
+import com.java.journeysspringmvc.exception.BadRequestException;
 import com.java.journeysspringmvc.mapper.TourMapper;
 import com.java.journeysspringmvc.repository.TourRepository;
 import com.java.journeysspringmvc.repository.UserRepository;
-import com.java.journeysspringmvc.util.PageRequests;
+import com.java.journeysspringmvc.util.Pageables;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Primary;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.util.*;
 
-import static com.java.journeysspringmvc.repository.TourSpecifications.*;
+import static com.java.journeysspringmvc.repository.Specs.*;
 
-@Slf4j
-@Primary
 @Service
 @RequiredArgsConstructor
 public class TourServiceImpl implements TourService {
 
-    private final static Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("createdAt"));
     private final static Set<String> SORTABLE_FIELDS = Set.of(
             "name", "price", "duration", "maxGroupSize", "difficulty",
             "averageRating", "ratingQuantity", "createdAt");
-    private final static Set<Role> GUIDE_ROLES = Set.of(Role.GUIDE, Role.LEAD_GUIDE);
 
     private final TourRepository tourRepository;
     private final UserRepository userRepository;
@@ -67,26 +61,28 @@ public class TourServiceImpl implements TourService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<TourDTO> listTours(String tourName, Difficulty tourDifficulty, BigDecimal minPrice, BigDecimal maxPrice, Integer minDuration, Integer maxDuration, Double minRating, Integer maxGroupSize, String sortBy, Integer pageNumber, Integer pageSize) {
-        PageRequest pageRequest = PageRequests.of(sortBy, pageNumber, pageSize, SORTABLE_FIELDS, DEFAULT_SORT);
-
+    public Page<TourDTO> listTours(TourFilter filter, boolean includeSecret, Pageable pageable) {
         Specification<Tour> spec = Specification.allOf(
-                nameContains(tourName),
-                hasDifficulty(tourDifficulty),
-                atLeast("price", minPrice),
-                atMost("price", maxPrice),
-                atLeast("duration", minDuration),
-                atMost("duration", maxDuration),
-                atLeast("averageRating", minRating),
-                atMost("maxGroupSize", maxGroupSize));
+                visibility(includeSecret),
+                containsIgnoreCase("name", filter.name()),
+                equalTo("difficulty", filter.difficulty()),
+                atLeast("price", filter.minPrice()),
+                atMost("price", filter.maxPrice()),
+                atLeast("duration", filter.minDuration()),
+                atMost("duration", filter.maxDuration()),
+                atLeast("averageRating", filter.minRating()),
+                atMost("maxGroupSize", filter.maxGroupSize()));
 
-        return tourRepository.findAll(spec, pageRequest).map(tourMapper::tourToTourDTO);
+        return tourRepository.findAll(spec, Pageables.requireSortable(pageable, SORTABLE_FIELDS))
+                .map(tourMapper::tourToTourDTO);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<TourDTO> getTourById(UUID id) {
-        return tourRepository.findById(id).map(tourMapper::tourToTourDTO);
+    public Optional<TourDTO> getTourById(UUID id, boolean includeSecret) {
+        return tourRepository.findById(id)
+                .filter(tour -> includeSecret || !tour.getSecretTour())
+                .map(tourMapper::tourToTourDTO);
     }
 
     @Override
@@ -128,14 +124,19 @@ public class TourServiceImpl implements TourService {
         return true;
     }
 
+    // Like Natours' query middleware, secret tours are left out for regular callers
+    private static Specification<Tour> visibility(boolean includeSecret) {
+        return equalTo("secretTour", includeSecret ? null : false);
+    }
+
     private Set<User> resolveGuides(Set<UUID> guideIds) {
         if (guideIds == null || guideIds.isEmpty()) {
             return new HashSet<>();
         }
 
         List<User> guides = userRepository.findAllById(guideIds);
-        if (guides.size() != guideIds.size() || !guides.stream().allMatch(user -> GUIDE_ROLES.contains(user.getRole()))) {
-            throw new IllegalArgumentException("guideIds must all reference existing guides or lead guides");
+        if (guides.size() != guideIds.size() || !guides.stream().allMatch(user -> Role.GUIDES.contains(user.getRole()))) {
+            throw new BadRequestException("guideIds must all reference existing guides or lead guides");
         }
         return new HashSet<>(guides);
     }
