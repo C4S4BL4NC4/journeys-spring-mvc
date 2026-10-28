@@ -1,6 +1,7 @@
 package com.java.journeysspringmvc.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -11,7 +12,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.UUID;
+import java.util.*;
 
 @Getter
 @Setter
@@ -39,6 +40,22 @@ public class Tour {
     @Column(length = 60, nullable = false, unique = true)
     private String slug;
 
+    // Length of the tour in days
+    @NotNull
+    @Positive
+    @Column(nullable = false)
+    private Integer duration;
+
+    @NotNull
+    @Positive
+    @Column(nullable = false)
+    private Integer maxGroupSize;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
+    private Difficulty difficulty;
+
     @DecimalMin("1.0")
     @DecimalMax("5.0")
     private Double averageRating;
@@ -59,6 +76,65 @@ public class Tour {
     @Digits(integer = 8, fraction = 2)
     @Column(precision = 10, scale = 2)
     private BigDecimal discount;
+
+    @NotBlank
+    @Size(max = 255)
+    @Column(nullable = false)
+    private String summary;
+
+    @Size(max = 2000)
+    @Column(length = 2000)
+    private String description;
+
+    @NotBlank
+    @Size(max = 255)
+    @Column(nullable = false)
+    private String imageCover;
+
+    @Builder.Default
+    @ElementCollection
+    @CollectionTable(name = "tour_images", joinColumns = @JoinColumn(name = "tour_id"))
+    @OrderColumn(name = "image_order")
+    @Column(name = "image", nullable = false)
+    private List<@NotBlank @Size(max = 255) String> images = new ArrayList<>();
+
+    @Builder.Default
+    @ElementCollection
+    @CollectionTable(name = "tour_start_dates", joinColumns = @JoinColumn(name = "tour_id"))
+    @OrderBy
+    @Column(name = "start_date", nullable = false)
+    private Set<@NotNull LocalDateTime> startDates = new LinkedHashSet<>();
+
+    // Hidden from public listings, like the secret tours in Natours
+    @NotNull
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean secretTour = false;
+
+    @Valid
+    @Embedded
+    @AttributeOverride(name = "longitude", column = @Column(name = "start_location_longitude"))
+    @AttributeOverride(name = "latitude", column = @Column(name = "start_location_latitude"))
+    @AttributeOverride(name = "address", column = @Column(name = "start_location_address"))
+    @AttributeOverride(name = "description", column = @Column(name = "start_location_description"))
+    @AttributeOverride(name = "day", column = @Column(name = "start_location_day_number"))
+    private Location startLocation;
+
+    @Valid
+    @Builder.Default
+    @ElementCollection
+    @CollectionTable(name = "tour_locations", joinColumns = @JoinColumn(name = "tour_id"))
+    @OrderColumn(name = "location_order")
+    private List<Location> locations = new ArrayList<>();
+
+    @Builder.Default
+    @ManyToMany
+    @JoinTable(
+            name = "tour_guides",
+            joinColumns = @JoinColumn(name = "tour_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    private Set<User> guides = new HashSet<>();
 
     @CreationTimestamp
     @Column(updatable = false)

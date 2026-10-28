@@ -10,6 +10,7 @@ import org.mapstruct.ReportingPolicy;
 public interface UserMapper {
     // The service hashes the raw password and sets it, so it is never mapped as-is
     @Mapping(target = "password", ignore = true)
+    @Mapping(target = "role", ignore = true)
     @Mapping(target = "version", ignore = true)
     User userDTOToUser(UserDTO userDTO);
 
