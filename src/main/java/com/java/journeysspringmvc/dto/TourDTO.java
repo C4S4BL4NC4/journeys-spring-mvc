@@ -65,7 +65,8 @@ public record TourDTO(
 
         List<@NotNull LocalDateTime> startDates,
 
-        boolean secretTour,
+        // Optional on input; the mapper defaults a missing value to false
+        Boolean secretTour,
 
         @Valid
         LocationDTO startLocation,
