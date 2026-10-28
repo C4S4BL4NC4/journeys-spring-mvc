@@ -1,19 +1,16 @@
 /*
- * Business logic for users: the implementation behind UserService.
+ * User profile logic: the implementation behind UserService.
  *
- *   listUsers    active users only, filtered by name/role, sorted and paged via PageRequests
- *   getUserById  active users only
- *   saveNewUser  hashes the password with the PasswordEncoder and forces Role.USER, whatever
- *                the request says; a duplicate email fails with a 409
- *   updateUser   applies an admin update of profile and role; never touches the password
- *   deleteUser   soft delete: sets active=false instead of removing the row, so tours that
- *                reference the user as a guide stay valid. Afterwards the user is invisible
- *                to every method here, and deleting again returns false.
+ *   listUsers    filtered by name/role, sorted and paged via PageRequests
+ *   getUserById  one profile by its Keycloak user id
+ *   syncUser     "just-in-time provisioning": creates the local profile the first time a
+ *                Keycloak user calls the API, and afterwards updates name, email and role
+ *                whenever they changed in Keycloak. Unchanged profiles aren't written, so
+ *                the per-request sync usually costs a single primary-key read.
  */
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.UserDTO;
-import com.java.journeysspringmvc.dto.UserUpdateDTO;
 import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.entity.User;
 import com.java.journeysspringmvc.mapper.UserMapper;
@@ -25,10 +22,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -42,10 +40,10 @@ public class UserServiceImpl implements UserService {
 
     private final static Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("createdAt"));
     private final static Set<String> SORTABLE_FIELDS = Set.of("name", "email", "role", "createdAt");
+    private final static int MAX_NAME_LENGTH = 50;
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
-    private final PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional(readOnly = true)
@@ -53,7 +51,6 @@ public class UserServiceImpl implements UserService {
         PageRequest pageRequest = PageRequests.of(sortBy, pageNumber, pageSize, SORTABLE_FIELDS, DEFAULT_SORT);
 
         Specification<User> spec = Specification.allOf(
-                isActive(),
                 nameContains(name),
                 hasRole(role));
 
@@ -63,42 +60,29 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public Optional<UserDTO> getUserById(UUID id) {
-        return findActiveUser(id).map(userMapper::userToUserDTO);
+        return userRepository.findById(id).map(userMapper::userToUserDTO);
     }
 
     @Override
     @Transactional
-    public UserDTO saveNewUser(UserDTO userDTO) {
-        User user = userMapper.userDTOToUser(userDTO);
-        user.setId(null);
-        // New accounts are always plain users; admins promote them through updateUser
-        user.setRole(Role.USER);
-        user.setPassword(passwordEncoder.encode(userDTO.password()));
+    public UserDTO syncUser(UUID id, String name, String email, Role role) {
+        // Keycloak allows longer names than the users table does
+        String fittedName = name.length() > MAX_NAME_LENGTH ? name.substring(0, MAX_NAME_LENGTH) : name;
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
 
+        User user = userRepository.findById(id).orElseGet(() -> User.builder().id(id).build());
+        boolean isNew = user.getVersion() == null;
+        if (!isNew && Objects.equals(user.getName(), fittedName)
+                && Objects.equals(user.getEmail(), normalizedEmail) && user.getRole() == role) {
+            return userMapper.userToUserDTO(user);
+        }
+
+        user.setName(fittedName);
+        user.setEmail(normalizedEmail);
+        user.setRole(role);
+        if (isNew) {
+            log.info("Provisioning local profile for Keycloak user {}", id);
+        }
         return userMapper.userToUserDTO(userRepository.saveAndFlush(user));
-    }
-
-    @Override
-    @Transactional
-    public Optional<UserDTO> updateUser(UUID id, UserUpdateDTO userUpdateDTO) {
-        return findActiveUser(id).map(user -> {
-            userMapper.updateUserFromDTO(userUpdateDTO, user);
-
-            return userMapper.userToUserDTO(userRepository.saveAndFlush(user));
-        });
-    }
-
-    // Deactivates rather than deletes, so the account's history (e.g. guided tours) stays intact
-    @Override
-    @Transactional
-    public boolean deleteUser(UUID id) {
-        return findActiveUser(id).map(user -> {
-            user.setActive(false);
-            return true;
-        }).orElse(false);
-    }
-
-    private Optional<User> findActiveUser(UUID id) {
-        return userRepository.findById(id).filter(User::getActive);
     }
 }

@@ -2,7 +2,7 @@
  * Unit tests for the Bean Validation rules on the DTOs and entities, run with a plain
  * Validator (no Spring context).
  *
- * Covers valid user and tour DTOs passing, password length and confirmation rules, required
+ * Covers a valid tour DTO passing, required
  * tour fields and slug format, discount having to be below price, coordinate ranges, the
  * computed durationWeeks, and the Tour entity rejecting invalid state on its own.
  */
@@ -10,7 +10,6 @@ package com.java.journeysspringmvc.validation;
 
 import com.java.journeysspringmvc.dto.LocationDTO;
 import com.java.journeysspringmvc.dto.TourDTO;
-import com.java.journeysspringmvc.dto.UserDTO;
 import com.java.journeysspringmvc.entity.Difficulty;
 import com.java.journeysspringmvc.entity.Tour;
 import jakarta.validation.ConstraintViolation;
@@ -48,21 +47,6 @@ class ValidationTest {
         return tourDto("The Forest Hiker", "the-forest-hiker", 5, Difficulty.EASY, new BigDecimal("397.00"),
                 new BigDecimal("50.00"), "Breathtaking hike", new LocationDTO(-115.57, 51.17, "Banff", null, null),
                 List.of(new LocationDTO(-116.21, 51.41, null, "Stop", 1)));
-    }
-
-    @Test
-    void validUserDtoPasses() {
-        UserDTO user = new UserDTO(null, "Jane", "jane@example.com", null, null,
-                "password123", "password123", null, null);
-        assertThat(violatedProperties(user)).isEmpty();
-    }
-
-    @Test
-    void userDtoRejectsShortAndMismatchedPasswords() {
-        UserDTO user = new UserDTO(null, " ", "not-an-email", null, null,
-                "short", "different", null, null);
-        assertThat(violatedProperties(user))
-                .containsExactlyInAnyOrder("name", "email", "password", "passwordConfirmed");
     }
 
     @Test

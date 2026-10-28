@@ -3,18 +3,22 @@
  *
  * Only the MVC layer starts (controller, JSON conversion, validation, exception handler and
  * the imported SecurityConfig); TourService is replaced with a Mockito mock, so no database
- * is involved. Requests go through MockMvc and the tests check:
+ * is involved. Requests carry mock JWTs with a chosen role instead of real tokens.
+ * Requests go through MockMvc and the tests check:
  *   - query parameters are passed to the service correctly, and the paged JSON shape
  *   - status codes: 200, 201 + Location header, 204, 400 (invalid body, malformed id,
  *     business rule), 404 (unknown tour) and 409 (duplicate slug)
- *   - reading tours is public, while creating or deleting without credentials gives 401
+ *   - reading tours is public; writing without a token gives 401, and with a token whose
+ *     role isn't ADMIN or LEAD_GUIDE gives 403
  */
 package com.java.journeysspringmvc.controller;
 
 import com.java.journeysspringmvc.config.SecurityConfig;
 import com.java.journeysspringmvc.dto.TourDTO;
 import com.java.journeysspringmvc.entity.Difficulty;
+import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.service.TourService;
+import com.java.journeysspringmvc.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -22,6 +26,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -36,7 +41,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -59,6 +64,10 @@ class TourControllerTest {
     @Autowired
     MockMvc mockMvc;
 
+    // Required by SecurityConfig's profile sync filter; mock JWTs carry no email, so it's never called
+    @MockitoBean
+    UserService userService;
+
     @MockitoBean
     TourService tourService;
 
@@ -69,7 +78,13 @@ class TourControllerTest {
     }
 
     private MockHttpServletRequestBuilder asAdmin(MockHttpServletRequestBuilder request) {
-        return request.with(user("admin")).contentType(MediaType.APPLICATION_JSON);
+        return asRole(request, Role.ADMIN);
+    }
+
+    // Stands in for a verified Keycloak token with the given role; real tokens are tested in KeycloakIntegrationTest
+    private MockHttpServletRequestBuilder asRole(MockHttpServletRequestBuilder request, Role role) {
+        return request.with(jwt().authorities(new SimpleGrantedAuthority("ROLE_" + role.name())))
+                .contentType(MediaType.APPLICATION_JSON);
     }
 
     @Test
@@ -200,6 +215,25 @@ class TourControllerTest {
 
         mockMvc.perform(asAdmin(delete(TourController.TOUR_PATH_ID, UUID.randomUUID())))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void letsLeadGuidesManageTours() throws Exception {
+        given(tourService.deleteTour(any())).willReturn(true);
+
+        mockMvc.perform(asRole(delete(TourController.TOUR_PATH_ID, UUID.randomUUID()), Role.LEAD_GUIDE))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void forbidsRegularUsersAndGuidesFromManagingTours() throws Exception {
+        mockMvc.perform(asRole(post(TourController.TOUR_PATH), Role.USER).content(VALID_TOUR))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(asRole(put(TourController.TOUR_PATH_ID, UUID.randomUUID()), Role.GUIDE).content(VALID_TOUR))
+                .andExpect(status().isForbidden());
+
+        verify(tourService, never()).saveNewTour(any());
+        verify(tourService, never()).updateTour(any(), any());
     }
 
     @Test

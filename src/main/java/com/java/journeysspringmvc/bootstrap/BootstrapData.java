@@ -2,8 +2,9 @@
  * Seeds the database with sample data on startup, for development and demos.
  *
  * As a CommandLineRunner it runs once after the application context is ready:
- *   1. loadUsers() creates an admin, a lead guide, a guide and two regular users,
- *      all sharing the development password "password123" (stored BCrypt-hashed).
+ *   1. loadUsers() creates the profiles of the five Keycloak seed users (an admin, a lead
+ *      guide, a guide and two regular users). Their ids match keycloak/journeys-realm.json,
+ *      so logging in as e.g. jane@journeys.dev / password123 lands on this profile.
  *   2. loadTours() creates sample Natours tours and assigns the guides to them.
  *      Users are loaded first because tours need guides to reference.
  * Each step skips itself if its table already has rows, so restarting against a
@@ -17,7 +18,6 @@ import com.java.journeysspringmvc.repository.UserRepository;
 import com.java.journeysspringmvc.util.FormatUrl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,12 +29,15 @@ import java.util.*;
 @RequiredArgsConstructor
 public class BootstrapData implements CommandLineRunner {
 
-    // Development-only seed password shared by every bootstrapped user
-    private static final String SEED_PASSWORD = "password123";
+    // Keycloak user ids of the seed users in keycloak/journeys-realm.json
+    static final UUID ADMIN_ID = UUID.fromString("6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a01");
+    static final UUID LEAD_GUIDE_ID = UUID.fromString("6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a02");
+    static final UUID GUIDE_ID = UUID.fromString("6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a03");
+    static final UUID JANE_ID = UUID.fromString("6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a04");
+    static final UUID JOHN_ID = UUID.fromString("6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a05");
 
     private final TourRepository tourRepository;
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional
@@ -50,14 +53,12 @@ public class BootstrapData implements CommandLineRunner {
             return;
         }
 
-        String hashedPassword = passwordEncoder.encode(SEED_PASSWORD);
-
         userRepository.saveAll(List.of(
-                user("Admin", "admin@journeys.dev", Role.ADMIN, hashedPassword),
-                user("Lena Lead", "lead.guide@journeys.dev", Role.LEAD_GUIDE, hashedPassword),
-                user("Gus Guide", "guide@journeys.dev", Role.GUIDE, hashedPassword),
-                user("Jane Doe", "jane@journeys.dev", Role.USER, hashedPassword),
-                user("John Smith", "john@journeys.dev", Role.USER, hashedPassword)
+                user(ADMIN_ID, "Alex Admin", "admin@journeys.dev", Role.ADMIN),
+                user(LEAD_GUIDE_ID, "Lena Lead", "lead.guide@journeys.dev", Role.LEAD_GUIDE),
+                user(GUIDE_ID, "Gus Guide", "guide@journeys.dev", Role.GUIDE),
+                user(JANE_ID, "Jane Doe", "jane@journeys.dev", Role.USER),
+                user(JOHN_ID, "John Smith", "john@journeys.dev", Role.USER)
         ));
     }
 
@@ -166,12 +167,12 @@ public class BootstrapData implements CommandLineRunner {
         return LocalDateTime.of(year, month, day, 9, 0);
     }
 
-    private User user(String name, String email, Role role, String hashedPassword) {
+    private User user(UUID id, String name, String email, Role role) {
         return User.builder()
+                .id(id)
                 .name(name)
                 .email(email)
                 .role(role)
-                .password(hashedPassword)
                 .build();
     }
 

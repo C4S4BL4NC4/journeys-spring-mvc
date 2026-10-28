@@ -1,0 +1,20 @@
+# Local development services. Start with: docker compose up -d
+#
+# keycloak  identity provider for the Journeys API (http://localhost:9090)
+#           - admin console: http://localhost:9090/admin  (admin / admin)
+#           - imports ./keycloak/journeys-realm.json on first start: roles, clients and the
+#             seed users (password "password123"), whose ids match BootstrapData's users
+#           - start-dev keeps Keycloak's own data in the container; recreating the container
+#             resets the realm to the JSON file
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "9090:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro

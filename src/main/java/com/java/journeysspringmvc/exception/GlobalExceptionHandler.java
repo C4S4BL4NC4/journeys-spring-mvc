@@ -6,7 +6,7 @@
  * Mappings:
  *   NotFoundException                 -> 404
  *   IllegalArgumentException          -> 400 (business rule broken, e.g. a guideId that isn't a guide)
- *   DataIntegrityViolationException   -> 409 (unique constraint, e.g. duplicate slug or email)
+ *   DataIntegrityViolationException   -> 409 (unique constraint, e.g. a duplicate tour slug)
  * Extending ResponseEntityExceptionHandler also covers Spring MVC's own errors, such as failed
  * @Validated bodies, unreadable JSON or a malformed UUID in the path, which all become 400s.
  */

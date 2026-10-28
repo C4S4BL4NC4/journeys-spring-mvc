@@ -2,8 +2,6 @@
  * Reusable query filters for users, combined by UserServiceImpl.listUsers.
  *
  * Same pattern as TourSpecifications: each filter returns null when unused so it drops out.
- *   isActive      always applied, so deactivated accounts never show up (Natours does the
- *                 same with its query middleware)
  *   nameContains  case-insensitive substring match on the name
  *   hasRole       exact role
  */
@@ -18,11 +16,6 @@ import org.springframework.util.StringUtils;
 public final class UserSpecifications {
 
     private UserSpecifications() {
-    }
-
-    // Deactivated accounts are hidden from every lookup, like Natours' /^find/ query middleware
-    public static Specification<User> isActive() {
-        return (root, query, cb) -> cb.isTrue(root.get("active"));
     }
 
     public static Specification<User> nameContains(String name) {

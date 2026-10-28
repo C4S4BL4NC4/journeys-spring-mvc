@@ -1,13 +1,13 @@
 /*
- * The contract for user business logic, used by UserController.
+ * The contract for user profile logic, used by UserController and CurrentUserSyncFilter.
  *
- * Works with UserDTO / UserUpdateDTO, never entities. As with TourService, "not found" is
- * Optional.empty() or false rather than an exception.
+ * Accounts are created, edited and disabled in Keycloak, so there are no create/update/
+ * delete methods here. The app only reads its mirror of user profiles and keeps it in sync
+ * with token claims via syncUser. As with TourService, "not found" is Optional.empty().
  */
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.UserDTO;
-import com.java.journeysspringmvc.dto.UserUpdateDTO;
 import com.java.journeysspringmvc.entity.Role;
 import org.springframework.data.domain.Page;
 
@@ -19,9 +19,5 @@ public interface UserService {
 
     Optional<UserDTO> getUserById(UUID id);
 
-    UserDTO saveNewUser(UserDTO userDTO);
-
-    Optional<UserDTO> updateUser(UUID id, UserUpdateDTO userUpdateDTO);
-
-    boolean deleteUser(UUID id);
+    UserDTO syncUser(UUID id, String name, String email, Role role);
 }

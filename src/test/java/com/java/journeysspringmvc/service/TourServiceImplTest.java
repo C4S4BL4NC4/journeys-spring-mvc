@@ -152,10 +152,10 @@ class TourServiceImplTest {
 
     private User user(String email, Role role) {
         return userRepository.saveAndFlush(User.builder()
+                .id(UUID.randomUUID())
                 .name("Test User")
                 .email(email)
                 .role(role)
-                .password("{bcrypt}$2a$10$hashedvalue")
                 .build());
     }
 

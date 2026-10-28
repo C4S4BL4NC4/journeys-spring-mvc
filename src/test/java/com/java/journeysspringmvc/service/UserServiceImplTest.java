@@ -1,17 +1,14 @@
 /*
- * Tests UserServiceImpl against a real (in-memory) database, using @DataJpaTest plus the service
- * and the real PasswordEncoder.
+ * Tests UserServiceImpl against a real (in-memory) database, using @DataJpaTest plus the service.
  *
  * Other tests may have seeded users, so every test user is named "Zelda ..." and listings
- * filter on that name. Covers: password hashing and the forced USER role, duplicate email
- * rejection, listing filtered by name/role with inactive users hidden, lookups, updates that
- * leave the password alone, and delete deactivating rather than removing the user.
+ * filter on that name. Covers the profile sync from Keycloak claims (first-time creation,
+ * picking up changed claims, skipping the write when nothing changed, fitting long names),
+ * listing filtered by name/role, and lookups by id.
  */
 package com.java.journeysspringmvc.service;
 
-import com.java.journeysspringmvc.config.PasswordConfig;
 import com.java.journeysspringmvc.dto.UserDTO;
-import com.java.journeysspringmvc.dto.UserUpdateDTO;
 import com.java.journeysspringmvc.entity.Role;
 import com.java.journeysspringmvc.entity.User;
 import com.java.journeysspringmvc.mapper.UserMapper;
@@ -24,17 +21,14 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({UserServiceImpl.class, PasswordConfig.class})
+@Import(UserServiceImpl.class)
 class UserServiceImplTest {
 
     // Built via MapStruct's factory so the test doesn't reference the generated UserMapperImpl directly
@@ -52,56 +46,68 @@ class UserServiceImplTest {
     @Autowired
     UserRepository userRepository;
 
-    @Autowired
-    PasswordEncoder passwordEncoder;
-
-    // The in-memory DB may already hold seeded users, so test users share a distinctive name to filter on
     private static final String TEST_NAME = "Zelda";
-
-    private UserDTO newUser(String email) {
-        return new UserDTO(null, TEST_NAME + " Test", email, null, Role.ADMIN,
-                "password123", "password123", null, null);
-    }
 
     private User saveUser(String name, String email, Role role) {
         return userRepository.saveAndFlush(User.builder()
+                .id(UUID.randomUUID())
                 .name(name)
                 .email(email)
                 .role(role)
-                .password("{bcrypt}$2a$10$hashedvalue")
                 .build());
     }
 
     @Test
-    void savesNewUserWithHashedPasswordAndUserRole() {
-        UserDTO saved = userService.saveNewUser(newUser("Zelda@Example.com"));
+    void syncCreatesProfileOnFirstRequest() {
+        UUID keycloakId = UUID.randomUUID();
 
-        assertThat(saved.id()).isNotNull();
-        assertThat(saved.role()).isEqualTo(Role.USER);
-        assertThat(saved.email()).isEqualTo("zelda@example.com");
-        assertThat(saved.photo()).isEqualTo(User.DEFAULT_PHOTO);
-        assertThat(saved.password()).isNull();
+        UserDTO synced = userService.syncUser(keycloakId, "Zelda Newcomer", "Zelda@Example.com", Role.USER);
 
-        User stored = userRepository.findById(saved.id()).orElseThrow();
-        assertThat(stored.getPassword()).startsWith("{bcrypt}");
-        assertThat(passwordEncoder.matches("password123", stored.getPassword())).isTrue();
+        assertThat(synced.id()).isEqualTo(keycloakId);
+        assertThat(synced.email()).isEqualTo("zelda@example.com");
+        assertThat(synced.photo()).isEqualTo(User.DEFAULT_PHOTO);
+        assertThat(userRepository.findById(keycloakId)).get()
+                .extracting(User::getName, User::getRole)
+                .containsExactly("Zelda Newcomer", Role.USER);
     }
 
     @Test
-    void rejectsDuplicateEmail() {
-        userService.saveNewUser(newUser("zelda@example.com"));
+    void syncPicksUpChangesMadeInKeycloak() {
+        User existing = saveUser("Zelda Old", "zelda.old@example.com", Role.USER);
+        int versionBefore = existing.getVersion();
 
-        assertThatThrownBy(() -> userService.saveNewUser(newUser("ZELDA@example.com")))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        userService.syncUser(existing.getId(), "Zelda New", "zelda.new@example.com", Role.GUIDE);
+
+        User updated = userRepository.findById(existing.getId()).orElseThrow();
+        assertThat(updated.getName()).isEqualTo("Zelda New");
+        assertThat(updated.getEmail()).isEqualTo("zelda.new@example.com");
+        assertThat(updated.getRole()).isEqualTo(Role.GUIDE);
+        assertThat(updated.getVersion()).isEqualTo(versionBefore + 1);
     }
 
     @Test
-    void listsActiveUsersFilteredByNameAndRole() {
+    void syncSkipsWriteWhenNothingChanged() {
+        User existing = saveUser("Zelda Same", "zelda.same@example.com", Role.GUIDE);
+        int versionBefore = existing.getVersion();
+
+        userService.syncUser(existing.getId(), "Zelda Same", "ZELDA.same@example.com", Role.GUIDE);
+
+        assertThat(userRepository.findById(existing.getId()).orElseThrow().getVersion()).isEqualTo(versionBefore);
+    }
+
+    @Test
+    void syncFitsNamesLongerThanTheColumn() {
+        String longName = TEST_NAME + " " + "x".repeat(80);
+
+        UserDTO synced = userService.syncUser(UUID.randomUUID(), longName, "zelda.long@example.com", Role.USER);
+
+        assertThat(synced.name()).hasSize(50).startsWith(TEST_NAME);
+    }
+
+    @Test
+    void listsUsersFilteredByNameAndRole() {
         saveUser(TEST_NAME + " Guide", "z.guide@example.com", Role.GUIDE);
         saveUser(TEST_NAME + " User", "z.user@example.com", Role.USER);
-        User inactive = saveUser(TEST_NAME + " Gone", "z.gone@example.com", Role.GUIDE);
-        inactive.setActive(false);
-        userRepository.saveAndFlush(inactive);
 
         assertThat(userService.listUsers(TEST_NAME.toLowerCase(), null, "name", null, null))
                 .extracting(UserDTO::name)
@@ -112,41 +118,10 @@ class UserServiceImplTest {
     }
 
     @Test
-    void getsActiveUserById() {
+    void getsUserById() {
         User user = saveUser(TEST_NAME, "z@example.com", Role.USER);
 
         assertThat(userService.getUserById(user.getId())).get().extracting(UserDTO::email).isEqualTo("z@example.com");
         assertThat(userService.getUserById(UUID.randomUUID())).isEmpty();
-    }
-
-    @Test
-    void updatesProfileAndRoleButNotPassword() {
-        User user = saveUser(TEST_NAME, "z@example.com", Role.USER);
-        String passwordHash = user.getPassword();
-
-        UserDTO updated = userService.updateUser(user.getId(),
-                new UserUpdateDTO("Zelda Renamed", "Z.New@example.com", null, Role.GUIDE)).orElseThrow();
-
-        assertThat(updated.name()).isEqualTo("Zelda Renamed");
-        assertThat(updated.email()).isEqualTo("z.new@example.com");
-        assertThat(updated.role()).isEqualTo(Role.GUIDE);
-        assertThat(updated.photo()).isEqualTo(User.DEFAULT_PHOTO);
-        assertThat(userRepository.findById(user.getId()).orElseThrow().getPassword()).isEqualTo(passwordHash);
-    }
-
-    @Test
-    void returnsEmptyWhenUpdatingUnknownUser() {
-        assertThat(userService.updateUser(UUID.randomUUID(),
-                new UserUpdateDTO("Nobody", "nobody@example.com", null, Role.USER))).isEmpty();
-    }
-
-    @Test
-    void deleteDeactivatesUser() {
-        User user = saveUser(TEST_NAME, "z@example.com", Role.USER);
-
-        assertThat(userService.deleteUser(user.getId())).isTrue();
-        assertThat(userService.getUserById(user.getId())).isEmpty();
-        assertThat(userRepository.findById(user.getId()).orElseThrow().getActive()).isFalse();
-        assertThat(userService.deleteUser(user.getId())).isFalse();
     }
 }

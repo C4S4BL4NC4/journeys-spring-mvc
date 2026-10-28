@@ -1,0 +1,234 @@
+{
+  "realm": "journeys",
+  "displayName": "Journeys",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
+  "passwordPolicy": "length(8) and notUsername and notEmail",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      {
+        "name": "USER",
+        "description": "Regular customer; every new account gets this role"
+      },
+      {
+        "name": "GUIDE",
+        "description": "Can be assigned to lead tours"
+      },
+      {
+        "name": "LEAD_GUIDE",
+        "description": "Senior guide; can also manage tours"
+      },
+      {
+        "name": "ADMIN",
+        "description": "Full access, including user management"
+      },
+      {
+        "name": "default-roles-journeys",
+        "description": "Roles given to every new user",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "USER"
+          ]
+        }
+      }
+    ]
+  },
+  "defaultRole": {
+    "name": "default-roles-journeys"
+  },
+  "clients": [
+    {
+      "clientId": "journeys-web",
+      "name": "Journeys web app and Swagger UI",
+      "description": "Public browser client: authorization code flow with PKCE",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/swagger-ui/oauth2-redirect.html",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "acr"
+      ],
+      "protocolMappers": [
+        {
+          "name": "journeys-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "journeys-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "journeys-dev-cli",
+      "name": "Development scripts and tests (DEV ONLY)",
+      "description": "Password grant for curl, Postman and automated tests. Never create this client in a real environment.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "acr"
+      ],
+      "protocolMappers": [
+        {
+          "name": "journeys-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "journeys-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a01",
+      "username": "admin@journeys.dev",
+      "email": "admin@journeys.dev",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Alex",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-journeys",
+        "ADMIN"
+      ]
+    },
+    {
+      "id": "6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a02",
+      "username": "lead.guide@journeys.dev",
+      "email": "lead.guide@journeys.dev",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Lena",
+      "lastName": "Lead",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-journeys",
+        "LEAD_GUIDE"
+      ]
+    },
+    {
+      "id": "6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a03",
+      "username": "guide@journeys.dev",
+      "email": "guide@journeys.dev",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Gus",
+      "lastName": "Guide",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-journeys",
+        "GUIDE"
+      ]
+    },
+    {
+      "id": "6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a04",
+      "username": "jane@journeys.dev",
+      "email": "jane@journeys.dev",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Jane",
+      "lastName": "Doe",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-journeys",
+        "USER"
+      ]
+    },
+    {
+      "id": "6a1f3c52-3e1d-4c6b-9a57-1d2f0b7e8a05",
+      "username": "john@journeys.dev",
+      "email": "john@journeys.dev",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "John",
+      "lastName": "Smith",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-journeys",
+        "USER"
+      ]
+    }
+  ]
+}

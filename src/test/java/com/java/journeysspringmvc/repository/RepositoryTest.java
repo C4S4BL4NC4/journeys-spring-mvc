@@ -2,8 +2,8 @@
  * Persistence tests for TourRepository and UserRepository using @DataJpaTest.
  *
  * Each test runs in a transaction that's rolled back afterwards, against the in-memory H2
- * database built by the real Flyway migration. Covers generated fields and defaults (id,
- * timestamps, version), saving and reloading a tour's collections and guides, unique
+ * database built by the real Flyway migrations. Covers generated fields and defaults (id,
+ * timestamps, version), user ids assigned from Keycloak, saving and reloading a tour's collections and guides, unique
  * constraints (slug, case-insensitive email) and the findAllByRoleIn derived query.
  */
 package com.java.journeysspringmvc.repository;
@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -51,12 +52,13 @@ class RepositoryTest {
                 .imageCover("cover.jpg");
     }
 
+    // User ids come from Keycloak, so tests assign them instead of letting the database generate them
     private User validUser(String email, Role role) {
         return User.builder()
+                .id(UUID.randomUUID())
                 .name("Jane")
                 .email(email)
                 .role(role)
-                .password("{bcrypt}$2a$10$hashedvalue")
                 .build();
     }
 
@@ -105,30 +107,20 @@ class RepositoryTest {
     }
 
     @Test
-    void savesUserWithDefaultRole() {
+    void savesUserWithAssignedIdAndDefaults() {
+        UUID keycloakId = UUID.randomUUID();
         User saved = userRepository.saveAndFlush(User.builder()
-                .name("Jane")
-                .email("jane@example.com")
-                .password("{bcrypt}$2a$10$hashedvalue")
-                .build());
-
-        assertThat(saved.getId()).isNotNull();
-        assertThat(saved.getRole()).isEqualTo(Role.USER);
-    }
-
-    @Test
-    void savesUserWithAccountDefaultsAndLowercaseEmail() {
-        User saved = userRepository.saveAndFlush(User.builder()
+                .id(keycloakId)
                 .name("Jane")
                 .email("  Jane.Doe@Example.COM ")
-                .password("{bcrypt}$2a$10$hashedvalue")
                 .build());
 
+        assertThat(saved.getId()).isEqualTo(keycloakId);
+        assertThat(saved.getRole()).isEqualTo(Role.USER);
         assertThat(saved.getEmail()).isEqualTo("jane.doe@example.com");
         assertThat(saved.getPhoto()).isEqualTo(User.DEFAULT_PHOTO);
-        assertThat(saved.getActive()).isTrue();
-        assertThat(saved.getPasswordChangedAt()).isNull();
-        assertThat(saved.getPasswordResetToken()).isNull();
+        assertThat(saved.getCreatedAt()).isNotNull();
+        assertThat(saved.getVersion()).isZero();
     }
 
     @Test

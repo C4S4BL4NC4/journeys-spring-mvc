@@ -1,14 +1,15 @@
 /*
- * JPA entity for a user account, mapped to the "users" table.
+ * JPA entity for a user's profile, mapped to the "users" table.
  *
- *   - password holds the BCrypt hash, never the raw password.
- *   - passwordChangedAt / passwordResetToken / passwordResetExpires support the future
- *     password change and reset flows from Natours; the reset token is stored hashed.
- *   - active=false means the account was deleted (deactivated): the row is kept and the
- *     services hide it from every lookup.
- *   - Emails are trimmed and lowercased before every insert/update (normalizeEmail), so
- *     the unique constraint treats emails case-insensitively.
- *   - version provides optimistic locking, like Tour.
+ * Keycloak owns the account itself (login, password, password reset, disabling the account).
+ * This table is a local mirror of each user's profile so the app can link users to tours as
+ * guides and list them:
+ *   - id is the user's Keycloak id (the "sub" claim of their tokens), not generated here
+ *   - name, email and role are copied from the token claims by UserService.syncUser on the
+ *     user's requests, so changes made in Keycloak show up on their next request
+ *   - photo is app-owned data that Keycloak doesn't know about
+ * Emails are trimmed and lowercased before every insert/update (normalizeEmail), so the
+ * unique constraint treats emails case-insensitively. version provides optimistic locking.
  */
 package com.java.journeysspringmvc.entity;
 
@@ -21,7 +22,6 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
-import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
@@ -38,9 +38,9 @@ import java.util.UUID;
 public class User {
     public static final String DEFAULT_PHOTO = "default.jpg";
 
+    // Assigned from the Keycloak user id rather than generated
     @Id
-    @GeneratedValue(generator = "UUID")
-    @UuidGenerator
+    @NotNull
     @Column(length = 36, columnDefinition = "varchar", updatable = false, nullable = false)
     @JdbcTypeCode(SqlTypes.CHAR)
     private UUID id;
@@ -67,27 +67,6 @@ public class User {
     @Column(length = 20, nullable = false)
     private Role role = Role.USER;
 
-    // Stores the password hash, never the raw password
-    @NotBlank
-    @Size(max = 100)
-    @Column(length = 100, nullable = false)
-    private String password;
-
-    private LocalDateTime passwordChangedAt;
-
-    // SHA-256 hex of the reset token emailed to the user, never the token itself
-    @Size(max = 64)
-    @Column(length = 64)
-    private String passwordResetToken;
-
-    private LocalDateTime passwordResetExpires;
-
-    // Deactivated accounts are kept rather than deleted, like Natours
-    @NotNull
-    @Builder.Default
-    @Column(nullable = false)
-    private Boolean active = true;
-
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -95,6 +74,7 @@ public class User {
     @UpdateTimestamp
     private LocalDateTime lastModifiedAt;
 
+    // Also tells Spring Data whether the entity is new, since the id is assigned rather than generated
     @Version
     private Integer version;
 

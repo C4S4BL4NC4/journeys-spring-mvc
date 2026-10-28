@@ -1,8 +1,7 @@
 /*
- * Unit tests for the MapStruct-generated UserMapper (no Spring context needed).
+ * Unit test for the MapStruct-generated UserMapper (no Spring context needed).
  *
- * Checks that server-controlled fields (password, role, account state) are not copied from
- * the DTO, that a missing photo becomes the default, and that a provided photo is kept.
+ * Checks that every profile field of the User entity is copied into the response DTO.
  */
 package com.java.journeysspringmvc.mapper;
 
@@ -12,6 +11,9 @@ import com.java.journeysspringmvc.entity.User;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 
+import java.time.LocalDateTime;
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class UserMapperTest {
@@ -19,23 +21,20 @@ class UserMapperTest {
     private final UserMapper mapper = Mappers.getMapper(UserMapper.class);
 
     @Test
-    void mapsDtoToEntityKeepingServerDefaults() {
-        UserDTO dto = new UserDTO(null, "Jane", "jane@example.com", null, Role.ADMIN,
-                "password123", "password123", null, null);
+    void mapsProfileToDto() {
+        UUID id = UUID.randomUUID();
+        LocalDateTime created = LocalDateTime.of(2026, 1, 2, 3, 4);
+        User user = User.builder()
+                .id(id)
+                .name("Jane Doe")
+                .email("jane@example.com")
+                .photo("jane.jpg")
+                .role(Role.GUIDE)
+                .createdAt(created)
+                .lastModifiedAt(created)
+                .build();
 
-        User user = mapper.userDTOToUser(dto);
-
-        assertThat(user.getPhoto()).isEqualTo(User.DEFAULT_PHOTO);
-        assertThat(user.getRole()).isEqualTo(Role.USER);
-        assertThat(user.getActive()).isTrue();
-        assertThat(user.getPassword()).isNull();
-    }
-
-    @Test
-    void keepsPhotoWhenProvided() {
-        UserDTO dto = new UserDTO(null, "Jane", "jane@example.com", "jane.jpg", null,
-                "password123", "password123", null, null);
-
-        assertThat(mapper.userDTOToUser(dto).getPhoto()).isEqualTo("jane.jpg");
+        assertThat(mapper.userToUserDTO(user))
+                .isEqualTo(new UserDTO(id, "Jane Doe", "jane@example.com", "jane.jpg", Role.GUIDE, created, created));
     }
 }

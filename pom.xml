@@ -126,6 +126,13 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Runs a real Keycloak in Docker for the end-to-end security tests -->
+        <dependency>
+            <groupId>com.github.dasniko</groupId>
+            <artifactId>testcontainers-keycloak</artifactId>
+            <version>4.4.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
