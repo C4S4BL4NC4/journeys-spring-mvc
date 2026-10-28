@@ -1,3 +1,11 @@
+/*
+ * Unit tests for the Bean Validation rules on the DTOs and entities, run with a plain
+ * Validator (no Spring context).
+ *
+ * Covers valid user and tour DTOs passing, password length and confirmation rules, required
+ * tour fields and slug format, discount having to be below price, coordinate ranges, the
+ * computed durationWeeks, and the Tour entity rejecting invalid state on its own.
+ */
 package com.java.journeysspringmvc.validation;
 
 import com.java.journeysspringmvc.dto.LocationDTO;

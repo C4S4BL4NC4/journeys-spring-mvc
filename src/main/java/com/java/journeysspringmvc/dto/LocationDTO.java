@@ -1,3 +1,10 @@
+/*
+ * API representation of a geographic point: a tour's start location or one of its stops.
+ *
+ * Mirrors the Location embeddable entity. Coordinates are validated to real ranges
+ * (longitude -180..180, latitude -90..90). "day" is the tour day a stop is visited and is
+ * left empty for the start location.
+ */
 package com.java.journeysspringmvc.dto;
 
 import jakarta.validation.constraints.*;

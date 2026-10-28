@@ -1,3 +1,9 @@
+/*
+ * Unit tests for the MapStruct-generated TourMapper (no Spring context needed).
+ *
+ * Checks that mapping a DTO to an entity keeps server-side defaults instead of trusting the
+ * client (e.g. ratings), and that a tour's guides are turned into a set of guide ids.
+ */
 package com.java.journeysspringmvc.mapper;
 
 import com.java.journeysspringmvc.dto.LocationDTO;

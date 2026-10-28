@@ -1,3 +1,14 @@
+/*
+ * Seeds the database with sample data on startup, for development and demos.
+ *
+ * As a CommandLineRunner it runs once after the application context is ready:
+ *   1. loadUsers() creates an admin, a lead guide, a guide and two regular users,
+ *      all sharing the development password "password123" (stored BCrypt-hashed).
+ *   2. loadTours() creates sample Natours tours and assigns the guides to them.
+ *      Users are loaded first because tours need guides to reference.
+ * Each step skips itself if its table already has rows, so restarting against a
+ * persistent database never duplicates data. Finally greeter() prints the Swagger UI URL.
+ */
 package com.java.journeysspringmvc.bootstrap;
 
 import com.java.journeysspringmvc.entity.*;

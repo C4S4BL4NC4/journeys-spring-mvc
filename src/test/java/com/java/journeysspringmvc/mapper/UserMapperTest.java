@@ -1,3 +1,9 @@
+/*
+ * Unit tests for the MapStruct-generated UserMapper (no Spring context needed).
+ *
+ * Checks that server-controlled fields (password, role, account state) are not copied from
+ * the DTO, that a missing photo becomes the default, and that a provided photo is kept.
+ */
 package com.java.journeysspringmvc.mapper;
 
 import com.java.journeysspringmvc.dto.UserDTO;

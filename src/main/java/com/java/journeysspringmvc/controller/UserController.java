@@ -1,3 +1,16 @@
+/*
+ * REST endpoints for users under /api/v1/users. All of them require authentication.
+ *
+ *   GET    /api/v1/users            list active users; optional query params:
+ *                                   name, role, sort (e.g. "-createdAt"), page (1-based) and size
+ *   GET    /api/v1/users/{userId}   one active user, or 404
+ *   POST   /api/v1/users            create a user (UserDTO, with password + passwordConfirm); 201
+ *   PUT    /api/v1/users/{userId}   admin update of name, email, photo and role (UserUpdateDTO), or 404
+ *   DELETE /api/v1/users/{userId}   deactivate the user; 204, or 404
+ *
+ * Like TourController it only maps HTTP to UserService calls. Passwords are write-only in
+ * the DTO, so they are accepted in requests but never appear in responses.
+ */
 package com.java.journeysspringmvc.controller;
 
 import com.java.journeysspringmvc.dto.UserDTO;

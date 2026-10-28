@@ -1,3 +1,20 @@
+/*
+ * REST endpoints for tours under /api/v1/tours.
+ *
+ *   GET    /api/v1/tours            list tours; optional query params:
+ *                                   name, difficulty, minPrice, maxPrice, minDuration, maxDuration,
+ *                                   minRating, maxGroupSize, sort (e.g. "-price,averageRating"),
+ *                                   page (1-based) and size
+ *   GET    /api/v1/tours/{tourId}   one tour, or 404
+ *   POST   /api/v1/tours            create; 201 with a Location header pointing at the new tour
+ *   PUT    /api/v1/tours/{tourId}   replace a tour's editable fields, or 404
+ *   DELETE /api/v1/tours/{tourId}   delete; 204, or 404
+ *
+ * The controller only translates HTTP to service calls: request bodies are validated with
+ * @Validated (400 on failure), the work happens in TourService, and missing tours become a
+ * NotFoundException that GlobalExceptionHandler turns into a 404 response.
+ * List results are wrapped in PagedModel, giving JSON shaped like {"content": [...], "page": {...}}.
+ */
 package com.java.journeysspringmvc.controller;
 
 import com.java.journeysspringmvc.dto.TourDTO;

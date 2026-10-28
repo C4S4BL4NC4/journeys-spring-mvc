@@ -1,3 +1,12 @@
+/*
+ * Tests UserServiceImpl against a real (in-memory) database, using @DataJpaTest plus the service
+ * and the real PasswordEncoder.
+ *
+ * Other tests may have seeded users, so every test user is named "Zelda ..." and listings
+ * filter on that name. Covers: password hashing and the forced USER role, duplicate email
+ * rejection, listing filtered by name/role with inactive users hidden, lookups, updates that
+ * leave the password alone, and delete deactivating rather than removing the user.
+ */
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.config.PasswordConfig;

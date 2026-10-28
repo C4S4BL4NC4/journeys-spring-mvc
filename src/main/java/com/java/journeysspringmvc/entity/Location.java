@@ -1,3 +1,10 @@
+/*
+ * A geographic point stored inside the tours table, not as a table of its own (@Embeddable).
+ *
+ * Tour uses it twice: once as its start location (columns prefixed start_location_) and as a
+ * list of stops in the tour_locations collection table. "day" is stored as day_number
+ * because DAY is a reserved word in H2.
+ */
 package com.java.journeysspringmvc.entity;
 
 import jakarta.persistence.Column;

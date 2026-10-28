@@ -1,3 +1,11 @@
+/*
+ * Database access for users. Spring Data JPA implements this interface at runtime.
+ *
+ *   JpaRepository             CRUD and paging methods
+ *   JpaSpecificationExecutor  dynamic filtered queries built from UserSpecifications
+ *   findAllByRoleIn           derived query (Spring writes the SQL from the method name);
+ *                             BootstrapData uses it to find the guides to assign to tours
+ */
 package com.java.journeysspringmvc.repository;
 
 import com.java.journeysspringmvc.entity.Role;

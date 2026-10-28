@@ -1,3 +1,16 @@
+/*
+ * The JSON shape of a tour, used for both requests and responses of the tour endpoints.
+ *
+ * Why a DTO instead of exposing the Tour entity directly:
+ *   - Server-owned fields (id, averageRating, ratingQuantity, createdAt, lastModifiedAt) are
+ *     READ_ONLY: they appear in responses but are ignored if a client sends them.
+ *   - Guides are referenced by user id (guideIds) instead of embedding full user objects;
+ *     TourServiceImpl looks the users up.
+ *   - Bean Validation annotations reject bad input with a 400 before it reaches the service.
+ * Extras: isDiscountBelowPrice() is a cross-field validation rule, and durationWeeks() is a
+ * computed read-only property, matching Natours' durationWeeks virtual field.
+ * secretTour is optional on input and defaults to false.
+ */
 package com.java.journeysspringmvc.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;

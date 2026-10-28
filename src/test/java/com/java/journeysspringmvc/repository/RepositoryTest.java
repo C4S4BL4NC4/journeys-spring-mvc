@@ -1,3 +1,11 @@
+/*
+ * Persistence tests for TourRepository and UserRepository using @DataJpaTest.
+ *
+ * Each test runs in a transaction that's rolled back afterwards, against the in-memory H2
+ * database built by the real Flyway migration. Covers generated fields and defaults (id,
+ * timestamps, version), saving and reloading a tour's collections and guides, unique
+ * constraints (slug, case-insensitive email) and the findAllByRoleIn derived query.
+ */
 package com.java.journeysspringmvc.repository;
 
 import com.java.journeysspringmvc.entity.*;

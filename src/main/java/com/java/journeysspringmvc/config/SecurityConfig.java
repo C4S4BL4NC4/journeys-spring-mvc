@@ -1,3 +1,14 @@
+/*
+ * Interim Spring Security setup until real authentication (signup/login with JWTs) is built.
+ *
+ * Rules:
+ *   - GET requests on /api/v1/tours/** are public, so anyone can browse tours like in Natours.
+ *   - Every other request needs HTTP Basic credentials; currently the single admin user
+ *     defined by spring.security.user.* in application.properties.
+ *   - CSRF protection is off and sessions are stateless: this is a JSON API with no login
+ *     cookie, so CSRF tokens don't apply and would otherwise block POST/PUT/DELETE calls.
+ * There are no role checks yet; any authenticated user can do everything.
+ */
 package com.java.journeysspringmvc.config;
 
 import org.springframework.context.annotation.Bean;

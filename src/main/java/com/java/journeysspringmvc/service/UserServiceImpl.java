@@ -1,3 +1,15 @@
+/*
+ * Business logic for users: the implementation behind UserService.
+ *
+ *   listUsers    active users only, filtered by name/role, sorted and paged via PageRequests
+ *   getUserById  active users only
+ *   saveNewUser  hashes the password with the PasswordEncoder and forces Role.USER, whatever
+ *                the request says; a duplicate email fails with a 409
+ *   updateUser   applies an admin update of profile and role; never touches the password
+ *   deleteUser   soft delete: sets active=false instead of removing the row, so tours that
+ *                reference the user as a guide stay valid. Afterwards the user is invisible
+ *                to every method here, and deleting again returns false.
+ */
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.UserDTO;

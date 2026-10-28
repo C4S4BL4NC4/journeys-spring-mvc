@@ -1,3 +1,14 @@
+/*
+ * Tests TourServiceImpl against a real (in-memory) database, using @DataJpaTest plus the service.
+ *
+ * setUp() replaces whatever tours are in the database with four known tours; that cleanup is
+ * rolled back after each test. TourMapper is provided through MapStruct's factory so the test
+ * doesn't depend on the generated class name. Covers:
+ *   - filtering: none, name, difficulty + price range, duration/rating/group size combined
+ *   - sorting by several fields, ignoring unknown sort fields, and 1-based paging
+ *   - get, create (slug generation, given slug, guide resolution and validation),
+ *     update (fields replaced, slug and ratings kept) and delete
+ */
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.TourDTO;

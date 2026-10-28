@@ -1,3 +1,14 @@
+/*
+ * Web-layer tests for TourController using @WebMvcTest.
+ *
+ * Only the MVC layer starts (controller, JSON conversion, validation, exception handler and
+ * the imported SecurityConfig); TourService is replaced with a Mockito mock, so no database
+ * is involved. Requests go through MockMvc and the tests check:
+ *   - query parameters are passed to the service correctly, and the paged JSON shape
+ *   - status codes: 200, 201 + Location header, 204, 400 (invalid body, malformed id,
+ *     business rule), 404 (unknown tour) and 409 (duplicate slug)
+ *   - reading tours is public, while creating or deleting without credentials gives 401
+ */
 package com.java.journeysspringmvc.controller;
 
 import com.java.journeysspringmvc.config.SecurityConfig;

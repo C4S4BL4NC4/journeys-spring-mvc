@@ -1,3 +1,15 @@
+/*
+ * JPA entity for a user account, mapped to the "users" table.
+ *
+ *   - password holds the BCrypt hash, never the raw password.
+ *   - passwordChangedAt / passwordResetToken / passwordResetExpires support the future
+ *     password change and reset flows from Natours; the reset token is stored hashed.
+ *   - active=false means the account was deleted (deactivated): the row is kept and the
+ *     services hide it from every lookup.
+ *   - Emails are trimmed and lowercased before every insert/update (normalizeEmail), so
+ *     the unique constraint treats emails case-insensitively.
+ *   - version provides optimistic locking, like Tour.
+ */
 package com.java.journeysspringmvc.entity;
 
 import jakarta.persistence.*;

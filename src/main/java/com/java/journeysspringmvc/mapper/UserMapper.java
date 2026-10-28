@@ -1,3 +1,14 @@
+/*
+ * Converts between the User entity and UserDTO / UserUpdateDTO. MapStruct generates the
+ * implementation (UserMapperImpl) at compile time.
+ *
+ *   userDTOToUser      builds a new entity from a signup-style request
+ *   updateUserFromDTO  applies an admin update (name, email, photo, role) to an existing user
+ *   userToUserDTO      builds the response, leaving password fields empty
+ * The password is never mapped: UserServiceImpl hashes it and sets it itself. Role and all
+ * account-state fields (active, reset tokens, version...) are server-controlled and ignored
+ * on input. A missing photo becomes User.DEFAULT_PHOTO.
+ */
 package com.java.journeysspringmvc.mapper;
 
 import com.java.journeysspringmvc.dto.UserDTO;

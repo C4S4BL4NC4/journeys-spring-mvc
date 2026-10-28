@@ -1,3 +1,11 @@
+/*
+ * Web-layer tests for UserController using @WebMvcTest with a mocked UserService.
+ *
+ * Checks that every user endpoint requires authentication, that filters/sort/paging reach
+ * the service, that password and passwordConfirm never appear in responses, and the status
+ * codes for create (201, 400 on mismatched passwords, 409 on duplicate email), update
+ * (200, 400 on invalid input, 404) and delete (204, 404).
+ */
 package com.java.journeysspringmvc.controller;
 
 import com.java.journeysspringmvc.config.SecurityConfig;

@@ -1,3 +1,16 @@
+/*
+ * JPA entity for a tour; the central domain object of the app, mapped to the "tours" table.
+ *
+ * Besides basic columns (name, unique slug, duration, price, difficulty, ratings...) it holds:
+ *   - images and startDates: simple value collections in their own tables
+ *   - startLocation: an embedded Location stored in the tours table itself
+ *   - locations: the ordered list of stops, in the tour_locations table
+ *   - guides: a many-to-many link to User through the tour_guides join table
+ *   - createdAt/lastModifiedAt: filled in automatically by Hibernate
+ *   - version: optimistic locking, so two concurrent edits can't silently overwrite each other
+ * Validation annotations repeat the database constraints so invalid state fails early,
+ * and secretTour marks tours meant to be hidden from public listings.
+ */
 package com.java.journeysspringmvc.entity;
 
 import jakarta.persistence.*;

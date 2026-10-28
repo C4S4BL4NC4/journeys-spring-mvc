@@ -1,3 +1,10 @@
+/*
+ * The contract for tour business logic, used by TourController.
+ *
+ * Methods work with TourDTOs, not entities, so controllers never touch JPA objects.
+ * "Not found" is expressed without exceptions: Optional.empty() for lookups/updates and
+ * false for deletes; the controller decides how to turn that into HTTP.
+ */
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.TourDTO;

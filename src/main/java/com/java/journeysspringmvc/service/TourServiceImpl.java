@@ -1,3 +1,18 @@
+/*
+ * Business logic for tours: the implementation behind TourService.
+ *
+ *   listTours    combines the optional filters into one Specification query, with sorting
+ *                and paging handled by PageRequests
+ *   getTourById  looks one tour up
+ *   saveNewTour  generates the slug from the name when none is given (like Natours' pre-save
+ *                hook, e.g. "The Désert Crossing!" -> "the-desert-crossing") and resolves guideIds
+ *   updateTour   full replace of the editable fields; keeps the existing slug if none is sent,
+ *                so renaming a tour doesn't break its URL
+ *   deleteTour   deletes if it exists
+ * resolveGuides() checks every guideId belongs to an existing GUIDE or LEAD_GUIDE user and
+ * throws IllegalArgumentException (-> 400) otherwise. Writes use saveAndFlush so constraint
+ * errors like a duplicate slug surface here (-> 409) instead of at transaction commit.
+ */
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.TourDTO;

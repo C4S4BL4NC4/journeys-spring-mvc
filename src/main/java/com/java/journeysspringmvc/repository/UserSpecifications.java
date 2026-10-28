@@ -1,3 +1,12 @@
+/*
+ * Reusable query filters for users, combined by UserServiceImpl.listUsers.
+ *
+ * Same pattern as TourSpecifications: each filter returns null when unused so it drops out.
+ *   isActive      always applied, so deactivated accounts never show up (Natours does the
+ *                 same with its query middleware)
+ *   nameContains  case-insensitive substring match on the name
+ *   hasRole       exact role
+ */
 package com.java.journeysspringmvc.repository;
 
 import com.java.journeysspringmvc.entity.Role;

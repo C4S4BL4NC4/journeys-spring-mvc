@@ -1,3 +1,10 @@
+/*
+ * Thrown by controllers when the requested tour or user doesn't exist (or is deactivated).
+ *
+ * Services return Optional.empty() or false for "not found"; controllers convert that into
+ * this exception, and GlobalExceptionHandler turns it into a 404 response with the message
+ * as the "detail" field.
+ */
 package com.java.journeysspringmvc.exception;
 
 import org.springframework.http.HttpStatus;

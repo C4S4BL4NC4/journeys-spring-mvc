@@ -1,3 +1,10 @@
+/*
+ * Database access for tours. Spring Data JPA implements this interface at runtime.
+ *
+ *   JpaRepository             gives the CRUD and paging methods (findById, save, deleteById, ...)
+ *   JpaSpecificationExecutor  adds findAll(Specification, Pageable), which runs the dynamic
+ *                             filter queries built from TourSpecifications
+ */
 package com.java.journeysspringmvc.repository;
 
 import com.java.journeysspringmvc.entity.Tour;

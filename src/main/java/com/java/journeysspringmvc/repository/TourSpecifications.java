@@ -1,3 +1,13 @@
+/*
+ * Reusable query filters ("Specifications") for tours, combined by TourServiceImpl.listTours.
+ *
+ * Each method builds one WHERE condition, or returns null when its filter value wasn't given;
+ * Spring Data skips null specifications. That means any combination of filters works by
+ * combining them all with Specification.allOf(...), with no if/else per combination.
+ *   nameContains   case-insensitive substring match on the name
+ *   hasDifficulty  exact difficulty
+ *   atLeast/atMost generic >= / <= on any comparable field (price, duration, rating, group size)
+ */
 package com.java.journeysspringmvc.repository;
 
 import com.java.journeysspringmvc.entity.Difficulty;

@@ -1,3 +1,15 @@
+/*
+ * Turns exceptions thrown anywhere in the controllers into consistent JSON error responses.
+ *
+ * Every error body uses Spring's ProblemDetail (RFC 9457) format, e.g.
+ *   {"status": 404, "title": "Not Found", "detail": "No tour found with id ...", "instance": "/api/v1/tours/..."}
+ * Mappings:
+ *   NotFoundException                 -> 404
+ *   IllegalArgumentException          -> 400 (business rule broken, e.g. a guideId that isn't a guide)
+ *   DataIntegrityViolationException   -> 409 (unique constraint, e.g. duplicate slug or email)
+ * Extending ResponseEntityExceptionHandler also covers Spring MVC's own errors, such as failed
+ * @Validated bodies, unreadable JSON or a malformed UUID in the path, which all become 400s.
+ */
 package com.java.journeysspringmvc.exception;
 
 import org.springframework.dao.DataIntegrityViolationException;

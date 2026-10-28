@@ -1,3 +1,9 @@
+/*
+ * The contract for user business logic, used by UserController.
+ *
+ * Works with UserDTO / UserUpdateDTO, never entities. As with TourService, "not found" is
+ * Optional.empty() or false rather than an exception.
+ */
 package com.java.journeysspringmvc.service;
 
 import com.java.journeysspringmvc.dto.UserDTO;

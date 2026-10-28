@@ -1,3 +1,10 @@
+/*
+ * Tests BootstrapData's startup seeding against the real (in-memory) database.
+ *
+ *   - The expected number of tours and users exists after startup, and running the seeder
+ *     a second time adds nothing (it only seeds empty tables).
+ *   - Seeded passwords are stored BCrypt-hashed and still match the development password.
+ */
 package com.java.journeysspringmvc.bootstrap;
 
 import com.java.journeysspringmvc.entity.User;

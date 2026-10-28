@@ -1,3 +1,16 @@
+/*
+ * Converts between the Tour entity and TourDTO. MapStruct generates the implementation
+ * (TourMapperImpl) at compile time, so there's no hand-written copying code.
+ *
+ *   tourDTOToTour      builds a new entity from a request (used when creating a tour)
+ *   updateTourFromDTO  copies a request onto an existing entity in place (used when updating);
+ *                      collections are cleared and refilled rather than replaced, which keeps
+ *                      Hibernate's tracking of them intact
+ *   tourToTourDTO      builds the response, turning the guides into a set of ids via guideToId()
+ * Fields the client must not control (ratings, guides, version, and on update the id and
+ * timestamps) are explicitly ignored. unmappedTargetPolicy = ERROR makes the build fail if
+ * a new field is added to Tour without deciding how it's mapped.
+ */
 package com.java.journeysspringmvc.mapper;
 
 import com.java.journeysspringmvc.dto.TourDTO;

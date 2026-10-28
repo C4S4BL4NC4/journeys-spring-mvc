@@ -1,3 +1,12 @@
+/*
+ * The JSON shape of a user: the request body for creating one and the response for every user endpoint.
+ *
+ *   - password and passwordConfirm are WRITE_ONLY: accepted on input, never serialized
+ *     back out. isPasswordConfirmed() fails validation when the two differ.
+ *   - Password length is capped at 72 because BCrypt ignores anything past 72 bytes.
+ *   - id, role and the timestamps are READ_ONLY; clients can't pick their own role, and
+ *     UserServiceImpl always creates new users as Role.USER.
+ */
 package com.java.journeysspringmvc.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;

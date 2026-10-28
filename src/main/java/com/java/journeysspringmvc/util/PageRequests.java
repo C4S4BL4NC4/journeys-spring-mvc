@@ -1,3 +1,13 @@
+/*
+ * Builds Spring Data PageRequests from raw query parameters; shared by both services.
+ *
+ *   - Page numbers are 1-based for API clients and converted to Spring's 0-based numbering.
+ *   - Missing, zero/negative or oversized (> 1000) page sizes fall back to 25.
+ *   - The sort string uses Natours' syntax: comma-separated fields, "-" prefix for descending,
+ *     e.g. "-price,averageRating" = price high-to-low, then rating low-to-high.
+ *   - Only fields in the caller's allow-list are sorted on; unknown ones are ignored, so a typo
+ *     in the URL can't crash the query. If nothing valid remains, the default sort is used.
+ */
 package com.java.journeysspringmvc.util;
 
 import org.springframework.data.domain.PageRequest;
